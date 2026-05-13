@@ -94,8 +94,8 @@ def plot_rays(ray_data, env, ax=None, title=None, max_rays=None, alpha=0.6):
     Parameters
     ----------
     ray_data : pandas.DataFrame or list
-        Output from pm.compute_rays(). Each row is one ray path; columns
-        'x' (range in m) and 'y' (depth in m) provide the path.
+        Output from pm.compute_rays(). Each row is one ray path; column 'ray'
+        holds an (N,2) array: col[:,0] = range in km, col[:,1] = depth in m.
     env : dict
         arlpy environment dictionary
     ax : matplotlib.axes.Axes, optional
@@ -120,54 +120,38 @@ def plot_rays(ray_data, env, ax=None, title=None, max_rays=None, alpha=0.6):
     water_depth = _get_depth(env)
     max_range_km = _get_max_range(env)
 
-    # Draw water background
     ax.set_facecolor('#e8f4f8')
 
-    # Draw bottom as filled region
-    max_range_m = max_range_km * 1000.0
-    bottom_x = [0, max_range_m, max_range_m, 0]
+    # Bottom fill (x in km, y in m)
+    bottom_x = [0, max_range_km, max_range_km, 0]
     bottom_y = [water_depth, water_depth, water_depth * 1.05, water_depth * 1.05]
     ax.fill(bottom_x, bottom_y, color=BOTTOM_COLOR, alpha=0.9, zorder=2)
     ax.axhline(water_depth, color=BOTTOM_COLOR, linewidth=2, zorder=3)
-
-    # Draw surface
     ax.axhline(0, color=SURFACE_COLOR, linewidth=2, alpha=0.8, zorder=3, label='Surface')
 
-    # Plot rays
     if ray_data is None:
         ax.text(0.5, 0.5, 'No ray data', transform=ax.transAxes,
                 ha='center', va='center', fontsize=13, color='red')
-    elif isinstance(ray_data, _pd.DataFrame):
-        rays_list = [ray_data]
-    else:
-        rays_list = ray_data if hasattr(ray_data, '__iter__') else [ray_data]
+    elif hasattr(ray_data, 'iterrows'):
+        n_rays = len(ray_data)
+        if max_rays is not None:
+            step = max(1, n_rays // max_rays)
+            indices = list(range(0, n_rays, step))
+        else:
+            indices = list(range(n_rays))
 
-    if ray_data is not None:
-        rays_list = ray_data if hasattr(ray_data, '__len__') else [ray_data]
-        if hasattr(ray_data, 'iterrows'):
-            # Single DataFrame where each row is a ray
-            n_rays = len(ray_data)
-            if max_rays is not None:
-                step = max(1, n_rays // max_rays)
-                indices = range(0, n_rays, step)
-            else:
-                indices = range(n_rays)
+        cmap = cm.get_cmap('RdYlBu')
+        for i in indices:
+            row = ray_data.iloc[i]
+            if 'ray' in row.index:
+                ray_path = np.asarray(row['ray'])   # (N, 2): col0=km, col1=m
+                ax.plot(ray_path[:, 0], ray_path[:, 1],   # x already in km
+                        color=cmap(i / max(n_rays - 1, 1)),
+                        linewidth=0.8, alpha=alpha, zorder=4)
 
-            cmap = cm.get_cmap('RdYlBu')
-            for i in indices:
-                row = ray_data.iloc[i]
-                if 'x' in row and 'y' in row:
-                    x = np.asarray(row['x'])
-                    y = np.asarray(row['y'])
-                    # Color by first launch angle if available
-                    color_val = (i / max(n_rays - 1, 1))
-                    ax.plot(x * 1e3 if x.max() < 500 else x,
-                            y, color=cmap(color_val),
-                            linewidth=0.8, alpha=alpha, zorder=4)
-
-    ax.set_xlim(0, max_range_m)
+    ax.set_xlim(0, max_range_km)
     ax.set_ylim(water_depth * 1.05, -water_depth * 0.02)
-    ax.set_xlabel('Range (m)', fontsize=LABEL_SIZE)
+    ax.set_xlabel('Range (km)', fontsize=LABEL_SIZE)
     ax.set_ylabel('Depth (m)', fontsize=LABEL_SIZE)
     ax.grid(True, alpha=GRID_ALPHA)
 
@@ -230,7 +214,10 @@ def plot_transmission_loss(tl_data, env, ax=None, dynamic_range=60, title=None, 
     pressure_abs = np.where(pressure_abs < 1e-10, np.nan, pressure_abs)
     tl_matrix = -20.0 * np.log10(pressure_abs)
 
-    vmin = np.nanmin(tl_matrix)
+    # Use 5th-percentile as vmin so the near-source low-TL point doesn't
+    # collapse the entire color scale.
+    tl_finite = tl_matrix[np.isfinite(tl_matrix)]
+    vmin = float(np.percentile(tl_finite, 5)) if len(tl_finite) > 0 else 0.0
     vmax = vmin + dynamic_range
 
     im = ax.pcolormesh(ranges_km, depths, tl_matrix,
@@ -371,33 +358,46 @@ def plot_arrivals(arr_data, env=None, rx_range_idx=0, rx_depth_idx=0, ax=None, t
     except (KeyError, IndexError):
         df = arr_data
 
-    if 'time_of_arrival' in df.columns and 'amplitude' in df.columns:
-        times = np.asarray(df['time_of_arrival'], dtype=float) * 1000.0  # convert to ms
-        amps = np.abs(np.asarray(df['amplitude'], dtype=complex))
+    amp_col = 'arrival_amplitude' if 'arrival_amplitude' in df.columns else 'amplitude'
+    if 'time_of_arrival' in df.columns and amp_col in df.columns:
+        times_s = np.asarray(df['time_of_arrival'], dtype=float)
+        amps    = np.abs(np.asarray(df[amp_col], dtype=complex))
+        valid   = np.isfinite(times_s) & np.isfinite(amps) & (amps > 0)
+        times_s = times_s[valid]
+        amps    = amps[valid]
 
-        # Normalize
-        if amps.max() > 0:
-            amps_norm = amps / amps.max()
+        if len(times_s) == 0:
+            ax.text(0.5, 0.5, 'No valid arrivals', transform=ax.transAxes,
+                    ha='center', va='center', fontsize=12, color='gray')
         else:
-            amps_norm = amps
+            delay_ms  = (times_s - times_s.min()) * 1000.0
+            amps_norm = amps / amps.max()
 
-        markerline, stemlines, baseline = ax.stem(
-            times, amps_norm, linefmt=f'{WATER_COLOR}', markerfmt='o',
-            basefmt='k-'
-        )
-        markerline.set_markerfacecolor(WATER_COLOR)
-        markerline.set_markersize(8)
-        stemlines.set_linewidth(1.5)
-        stemlines.set_alpha(0.8)
+            # Color by bounce count if available
+            bounce_pal = [WATER_COLOR, '#27ae60', '#e67e22', '#c0392b']
+            if 'surface_bounces' in df.columns and 'bottom_bounces' in df.columns:
+                n_tot = (np.asarray(df['surface_bounces'], dtype=int) +
+                         np.asarray(df['bottom_bounces'],  dtype=int))[valid]
+                colors = [bounce_pal[min(int(n), 3)] for n in n_tot]
+            else:
+                colors = [WATER_COLOR] * len(delay_ms)
 
-        ax.set_xlabel('Arrival Time (ms)', fontsize=LABEL_SIZE)
-        ax.set_ylabel('Normalized Amplitude', fontsize=LABEL_SIZE)
+            ax.vlines(delay_ms, 0, amps_norm, colors=colors, linewidth=1.5, alpha=0.85)
+            ax.scatter(delay_ms, amps_norm, c=colors, s=55, zorder=5)
+            ax.axhline(0, color='k', linewidth=0.8)
 
-        freq = env.get('frequency', '?') if env else '?'
-        default_title = f'Multipath Arrivals  |  f = {freq} Hz  |  {len(times)} paths'
-        ax.set_title(title or default_title, fontsize=TITLE_SIZE)
-        ax.grid(True, alpha=GRID_ALPHA)
-        ax.set_ylim(-0.05, 1.15)
+            x_span = max(float(delay_ms.max()), 1.0)
+            ax.set_xlim(-x_span * 0.05, x_span * 1.15)
+            ax.set_ylim(-0.05, 1.15)
+            ax.set_xlabel('Delay relative to first arrival (ms)', fontsize=LABEL_SIZE)
+            ax.set_ylabel('Normalized Amplitude', fontsize=LABEL_SIZE)
+
+            freq = env.get('frequency', '?') if env else '?'
+            default_title = (f'Multipath Arrivals  |  f = {freq} Hz  |  '
+                             f'{len(times_s)} paths  |  '
+                             f'spread = {delay_ms.max():.1f} ms')
+            ax.set_title(title or default_title, fontsize=TITLE_SIZE)
+            ax.grid(True, alpha=GRID_ALPHA)
     else:
         ax.text(0.5, 0.5, f'Unexpected data format:\n{df.columns.tolist()}',
                 transform=ax.transAxes, ha='center', va='center', fontsize=10)
@@ -427,10 +427,20 @@ def plot_impulse_response(ir, fs, ax=None, title='Channel Impulse Response', col
     if standalone:
         fig, ax = plt.subplots(figsize=(10, 4))
 
-    t_ms = np.arange(len(ir)) / fs * 1000.0
-    ax.stem(t_ms, np.abs(ir), linefmt=color, markerfmt='o', basefmt='k-')
-    ax.set_xlabel('Time (ms)', fontsize=LABEL_SIZE)
-    ax.set_ylabel('Amplitude', fontsize=LABEL_SIZE)
+    t_ms   = np.arange(len(ir)) / fs * 1000.0
+    ir_abs = np.abs(ir)
+    ir_max = float(ir_abs.max()) if ir_abs.max() > 0 else 1.0
+    ir_norm = ir_abs / ir_max      # normalize so all plots share same [0,1] y-scale
+    sig = ir_norm > 0
+    if sig.any():
+        ax.vlines(t_ms[sig], 0, ir_norm[sig], colors=color, linewidth=1.5, alpha=0.85)
+        ax.scatter(t_ms[sig], ir_norm[sig], color=color, s=45, zorder=5)
+        x_span = max(float(t_ms[sig].max()), 1.0)
+        ax.set_xlim(-x_span * 0.05, x_span * 1.15)
+    ax.axhline(0, color='k', linewidth=0.8)
+    ax.set_ylim(-0.05, 1.15)
+    ax.set_xlabel('Delay (ms)', fontsize=LABEL_SIZE)
+    ax.set_ylabel('Normalized Amplitude', fontsize=LABEL_SIZE)
     ax.set_title(title, fontsize=TITLE_SIZE)
     ax.grid(True, alpha=GRID_ALPHA)
 
@@ -500,8 +510,10 @@ def annotate_convergence_zones(ax, cz_ranges, y_pos=None):
     ylim = ax.get_ylim()
     y_label = y_pos if y_pos is not None else min(ylim)
 
+    xmin, xmax = ax.get_xlim()
+    band = max(1.0, (xmax - xmin) * 0.015)   # 1.5% of plot width, min 1 km
     for r in cz_ranges:
         ax.axvline(r, color='yellow', linewidth=1.5, alpha=0.8, linestyle='--')
-        ax.axvspan(r - 5, r + 5, alpha=0.12, color='yellow')
+        ax.axvspan(r - band, r + band, alpha=0.12, color='yellow')
         ax.text(r, y_label, f'CZ\n{r:.0f} km', fontsize=8, color='goldenrod',
                 ha='center', va='top', fontweight='bold')

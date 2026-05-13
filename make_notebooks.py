@@ -319,19 +319,26 @@ display(widgets.VBox([
 
 Configure the source/receiver geometry and bottom type, then click **Run Ray Trace**.
 
+> **Default source depth = 1300 m** — this is the Munk profile SOFAR channel axis.
+> Placing the source at the SOFAR axis produces the classic convergence zone ray fan:
+> rays launched at all angles oscillate symmetrically around the axis and focus at
+> regular intervals (~65 km for typical deep-ocean profiles).
+> Move the source shallower (e.g. 100 m) to see how rays become trapped in the upper
+> water column and produce shadow zones below.
+
 ### What to look for
-- **Convergence zones**: tight bundles of rays at regular intervals — very low TL here
+- **Convergence zones**: tight bundles of rays focusing at ~65 km intervals — very low TL
 - **Shadow zones**: regions where no rays reach — very high TL
-- **SOFAR channel**: rays launched at small angles oscillate around the channel axis
-- **Bottom/surface bounces**: rays that interact with boundaries lose energy
+- **SOFAR channel**: rays launched at small angles (< 10°) oscillate tightly around the axis
+- **Bottom/surface bounces**: steep-angle rays that interact with boundaries lose energy
 """))
 
     cells.append(code_cell("""\
 # ── Ray trace widgets ─────────────────────────────────────────────────────────
-rt_src_depth = _slider('Source depth (m)',   100, 1, 4999, 1)
-rt_water_depth = _slider('Water depth (m)',  5000, 200, 6000, 50)
-rt_max_range = _slider('Max range (km)',     100, 1, 500, 1)
-rt_n_rays    = _int_slider('Number of rays', 100, 10, 500, 10)
+rt_src_depth = _slider('Source depth (m)',  1300, 1, 4999, 1)
+rt_water_depth = _slider('Water depth (m)', 5000, 200, 6000, 50)
+rt_max_range = _slider('Max range (km)',      100, 1, 500, 1)
+rt_n_rays    = _int_slider('Number of rays',  50, 10, 300, 10)
 rt_min_angle = _slider('Min launch angle°', -80, -89, 0, 1)
 rt_max_angle = _slider('Max launch angle°',  80, 0, 89, 1)
 rt_freq      = _slider('Frequency (Hz)',    500, 10, 10000, 10)
@@ -344,8 +351,32 @@ rt_run_btn = widgets.Button(description='▶ Run Ray Trace', button_style='prima
                              layout=widgets.Layout(width='200px'))
 rt_out = widgets.Output()
 rt_stats = widgets.HTML('')
+rt_warn = widgets.HTML('')
+
+_WARN_STYLE = 'color:darkorange;font-weight:bold'
+
+def _rt_check(_=None):
+    msgs = []
+    sd, wd = rt_src_depth.value, rt_water_depth.value
+    if sd >= wd:
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+    if rt_min_angle.value >= rt_max_angle.value:
+        msgs.append(f'⚠ Min angle ({rt_min_angle.value:.0f}°) ≥ max angle ({rt_max_angle.value:.0f}°) — no rays will be traced.')
+    cost = rt_n_rays.value * rt_max_range.value
+    if cost > 15000:   # ~150 rays × 100 km or equivalent
+        msgs.append(f'⚠ {rt_n_rays.value} rays × {rt_max_range.value:.0f} km — expect a slow run (> 30 s). Reduce rays or range for faster results.')
+    rt_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
+
+for _w in [rt_src_depth, rt_water_depth, rt_min_angle, rt_max_angle, rt_n_rays, rt_max_range]:
+    _w.observe(_rt_check, names='value')
+_rt_check()
 
 def _run_ray_trace(_=None):
+    if rt_min_angle.value >= rt_max_angle.value:
+        with rt_out:
+            clear_output(wait=True)
+            print('Cannot run: min launch angle must be less than max launch angle.')
+        return
     with rt_out:
         clear_output(wait=True)
         print('Running BELLHOP ray trace...')
@@ -361,8 +392,8 @@ def _run_ray_trace(_=None):
         soundspeed=ssp_use.tolist(),
         frequency=rt_freq.value,
         tx_depth=src_depth,
-        rx_depth=np.linspace(0, water_depth, 51),
-        rx_range=np.linspace(0.1, rt_max_range.value, 100),
+        rx_depth=np.linspace(0, water_depth, 21),
+        rx_range=np.linspace(0.1, rt_max_range.value, 25),
         min_angle=rt_min_angle.value,
         max_angle=rt_max_angle.value,
         nbeams=rt_n_rays.value,
@@ -387,30 +418,31 @@ def _run_ray_trace(_=None):
         ax_ray = axes[1]
         ax_ray.set_facecolor('#ddeeff')
 
-        max_range_m = rt_max_range.value * 1000.0
+        max_range_km = rt_max_range.value   # x-axis in km throughout
 
-        # Bottom
-        ax_ray.fill_between([0, max_range_m],
+        # Bottom (x in km, y in m)
+        ax_ray.fill_between([0, max_range_km],
                              [water_depth] * 2, [water_depth * 1.08] * 2,
                              color='#8B6914', alpha=0.9, zorder=2)
         ax_ray.axhline(water_depth, color='#8B6914', linewidth=2, zorder=3)
         ax_ray.axhline(0, color='#2196F3', linewidth=2, zorder=3)
 
-        # Plot rays
+        # Plot rays — arlpy stores each path in row['ray'] as (N,2):
+        # col 0 = range in km, col 1 = depth in metres
         cmap = plt.cm.RdYlBu
         n_rays = len(rays)
         for i, (_, row) in enumerate(rays.iterrows()):
-            if 'x' in row and 'y' in row:
-                x = np.asarray(row['x'])
-                y = np.asarray(row['y'])
-                ax_ray.plot(x, y, color=cmap(i / max(n_rays - 1, 1)),
+            if 'ray' in row.index:
+                ray_path = np.asarray(row['ray'])
+                ax_ray.plot(ray_path[:, 0], ray_path[:, 1],   # col0 already km
+                            color=cmap(i / max(n_rays - 1, 1)),
                             linewidth=0.7, alpha=0.65, zorder=4)
 
         ax_ray.plot(0, src_depth, 'r*', markersize=16, zorder=10,
                     label=f'Source: {src_depth:.0f} m')
-        ax_ray.set_xlim(0, max_range_m)
+        ax_ray.set_xlim(0, max_range_km)
         ax_ray.set_ylim(water_depth * 1.08, -water_depth * 0.02)
-        ax_ray.set_xlabel('Range (m)', fontsize=11)
+        ax_ray.set_xlabel('Range (km)', fontsize=11)
         ax_ray.set_ylabel('Depth (m)', fontsize=11)
         ax_ray.set_title(
             f'Ray Diagram  |  f={rt_freq.value:.0f} Hz  |  {n_rays} rays  |  '
@@ -435,6 +467,7 @@ display(widgets.VBox([
     widgets.HBox([rt_max_range, rt_n_rays]),
     widgets.HBox([rt_min_angle, rt_max_angle]),
     widgets.HBox([rt_freq, rt_bottom]),
+    rt_warn,
     rt_run_btn,
     rt_stats,
     rt_out
@@ -456,9 +489,12 @@ Higher TL = weaker signal. Convergence zones appear as vertical bands of low TL.
     cells.append(code_cell("""\
 # ── TL shared state ──────────────────────────────────────────────────────────
 _tl_result = {'tl': None, 'env': None}
+tl_ready = widgets.HTML(
+    '<span style="color:gray">No TL data yet — click <b>▶ Run TL Map</b> above.</span>'
+)
 
 # ── TL widgets ────────────────────────────────────────────────────────────────
-tl_src_depth   = _slider('Source depth (m)',    100, 1, 4999, 1)
+tl_src_depth   = _slider('Source depth (m)',   1300, 1, 4999, 1)
 tl_water_depth = _slider('Water depth (m)',    5000, 200, 6000, 50)
 tl_max_range   = _slider('Max range (km)',      100, 1, 500, 1)
 tl_freq        = _slider('Frequency (Hz)',      500, 10, 10000, 10)
@@ -476,7 +512,7 @@ tl_run_type = widgets.Dropdown(
     value='incoherent', description='Run type:',
     style={'description_width': '120px'}, layout=widgets.Layout(width='300px')
 )
-tl_slice_depth = _slider('TL slice depth (m)', 100, 0, 5000, 10)
+tl_slice_depth = _slider('TL slice depth (m)', 1300, 0, 5000, 10)
 tl_run_btn = widgets.Button(description='▶ Run TL Map', button_style='primary',
                               layout=widgets.Layout(width='200px'))
 tl_out    = widgets.Output()
@@ -484,6 +520,26 @@ tl_stats  = widgets.HTML('')
 tl_slice_btn = widgets.Button(description='Plot TL slice', button_style='',
                                layout=widgets.Layout(width='160px'))
 tl_slice_out = widgets.Output()
+tl_warn = widgets.HTML('')
+
+def _tl_check(_=None):
+    msgs = []
+    sd, wd = tl_src_depth.value, tl_water_depth.value
+    rmin, rmax = tl_rx_min_d.value, tl_rx_max_d.value
+    if sd >= wd:
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+    if rmin >= rmax:
+        msgs.append(f'⚠ Rx min depth ({rmin:.0f} m) ≥ Rx max depth ({rmax:.0f} m) — no receiver grid possible.')
+    if rmax > wd:
+        msgs.append(f'⚠ Rx max depth ({rmax:.0f} m) exceeds water depth ({wd:.0f} m) — will be clamped to {wd:.0f} m.')
+    sd_tl = tl_slice_depth.value
+    if sd_tl < rmin or sd_tl > rmax:
+        msgs.append(f'⚠ Slice depth ({sd_tl:.0f} m) is outside the receiver depth range ({rmin:.0f}–{rmax:.0f} m) — slice will show nearest available depth.')
+    tl_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
+
+for _w in [tl_src_depth, tl_water_depth, tl_rx_min_d, tl_rx_max_d, tl_slice_depth]:
+    _w.observe(_tl_check, names='value')
+_tl_check()
 
 run_type_map = {
     'coherent': pm.coherent,
@@ -492,6 +548,11 @@ run_type_map = {
 }
 
 def _run_tl(_=None):
+    if tl_rx_min_d.value >= tl_rx_max_d.value:
+        with tl_out:
+            clear_output(wait=True)
+            print('Cannot run: Rx min depth must be less than Rx max depth.')
+        return
     with tl_out:
         clear_output(wait=True)
         print('Running BELLHOP transmission loss computation...')
@@ -514,7 +575,17 @@ def _run_tl(_=None):
     eb._apply_bottom(env, tl_bottom.value)
 
     task = run_type_map.get(tl_run_type.value, pm.incoherent)
-    tl = pm.compute_transmission_loss(env, mode=task)
+
+    try:
+        tl = pm.compute_transmission_loss(env, mode=task)
+    except Exception as exc:
+        import traceback
+        with tl_out:
+            clear_output(wait=True)
+            print(f'BELLHOP error: {type(exc).__name__}: {exc}')
+            traceback.print_exc()
+        tl_ready.value = '<span style="color:red">✗ TL computation failed — see output above.</span>'
+        return
 
     _tl_result['tl'] = tl
     _tl_result['env'] = env
@@ -523,32 +594,49 @@ def _run_tl(_=None):
         clear_output(wait=True)
         if tl is None:
             print('BELLHOP did not produce TL output.')
+            tl_ready.value = '<span style="color:red">✗ TL returned None.</span>'
             return
 
-        fig, axes = plt.subplots(1, 2, figsize=(16, 5),
-                                  gridspec_kw={'width_ratios': [1, 3.5]})
+        try:
+            fig, axes = plt.subplots(1, 2, figsize=(16, 5),
+                                      gridspec_kw={'width_ratios': [1, 3.5]})
 
-        pl.plot_ssp(ssp_use, ax=axes[0], title=f'SSP: {_locked_ssp["name"]}')
-        _, cb = pl.plot_transmission_loss(
-            tl, env, ax=axes[1],
-            dynamic_range=tl_dyn_range.value,
-            title=f'{tl_run_type.value.title()} TL  |  '
-                  f'f={tl_freq.value:.0f} Hz  |  {tl_bottom.value} bottom'
-        )
-
-        # Convergence zone detection
-        cz_ranges = ut.find_convergence_zones(tl, threshold_db=4.0)
-        if cz_ranges:
-            pl.annotate_convergence_zones(axes[1], cz_ranges)
-            cz_str = ', '.join(f'{r:.0f} km' for r in cz_ranges)
-            tl_stats.value = (
-                f'<b>Convergence zones detected at:</b> {cz_str}'
-                f' | Run type: {tl_run_type.value}'
+            pl.plot_ssp(ssp_use, ax=axes[0], title=f'SSP: {_locked_ssp["name"]}')
+            _, cb = pl.plot_transmission_loss(
+                tl, env, ax=axes[1],
+                dynamic_range=tl_dyn_range.value,
+                title=f'{tl_run_type.value.title()} TL  |  '
+                      f'f={tl_freq.value:.0f} Hz  |  {tl_bottom.value} bottom'
             )
-        else:
-            tl_stats.value = f'<b>No convergence zones detected</b> | Run type: {tl_run_type.value}'
 
-        show_fig(fig)
+            # Convergence zone detection
+            cz_ranges = ut.find_convergence_zones(tl, threshold_db=4.0)
+            if cz_ranges:
+                pl.annotate_convergence_zones(axes[1], cz_ranges)
+                cz_str = ', '.join(f'{r:.0f} km' for r in cz_ranges)
+                tl_stats.value = (
+                    f'<b>Convergence zones detected at:</b> {cz_str}'
+                    f' | Run type: {tl_run_type.value}'
+                )
+            else:
+                tl_stats.value = (
+                    f'<b>No convergence zones detected</b> | Run type: {tl_run_type.value}'
+                )
+
+            show_fig(fig)
+
+            tl_ready.value = (
+                f'<span style="color:green;font-weight:bold">✓ TL ready</span> — '
+                f'{tl_run_type.value}, f={tl_freq.value:.0f} Hz, '
+                f'src={src_depth:.0f} m, max {tl_max_range.value:.0f} km. '
+                f'Use <b>Pull TL from Section 4</b> in Section 7.'
+            )
+
+        except Exception as plot_exc:
+            import traceback
+            print(f'Plot error: {type(plot_exc).__name__}: {plot_exc}')
+            traceback.print_exc()
+            tl_ready.value = '<span style="color:orange">⚠ TL computed but plot failed.</span>'
 
 def _plot_tl_slice(_=None):
     tl = _tl_result.get('tl')
@@ -572,7 +660,9 @@ display(widgets.VBox([
     widgets.HBox([tl_max_range, tl_freq]),
     widgets.HBox([tl_rx_min_d, tl_rx_max_d, tl_n_depths]),
     widgets.HBox([tl_dyn_range, tl_bottom, tl_run_type]),
+    tl_warn,
     tl_run_btn,
+    tl_ready,
     tl_stats,
     tl_out,
     widgets.HTML('<hr><b>Horizontal TL slice</b>'),
@@ -599,6 +689,18 @@ The **delay spread** $T_d$ (latest minus earliest arrival) determines:
 
 For typical ocean channels: $T_d \\approx 10$–$200$ ms → $B_c \\approx 5$–$100$ Hz
 (Compare: OFDM subcarrier spacing must be $\\gg B_c$)
+
+### Getting interesting multipath
+
+The number of arrivals depends strongly on geometry:
+
+| Setting | Result |
+|---------|--------|
+| Source + Rx both on SOFAR axis (1300 m), range < 65 km | **1 arrival** — only the direct horizontal path returns to that depth; oscillating rays are mid-cycle |
+| Source on SOFAR axis, range ≈ **65 km** (1st convergence zone) | **Many arrivals** — all oscillating rays refocus at the CZ |
+| Source on SOFAR axis, Rx at shallow depth (e.g. 100 m) | **Several arrivals** — catches the upward-swinging rays mid-cycle |
+
+> **Default is 65 km** — the first convergence zone of the Munk profile where multipath is richest.
 """))
 
     cells.append(code_cell("""\
@@ -606,7 +708,7 @@ For typical ocean channels: $T_d \\approx 10$–$200$ ms → $B_c \\approx 5$–
 _arr_result = {'arr': None, 'env': None}
 
 # ── Arrivals widgets ──────────────────────────────────────────────────────────
-arr_src_depth   = _slider('Source depth (m)',  100, 1, 4999, 1)
+arr_src_depth   = _slider('Source depth (m)', 1300, 1, 4999, 1)
 arr_water_depth = _slider('Water depth (m)', 5000, 200, 6000, 50)
 arr_freq        = _slider('Frequency (Hz)',   500, 10, 5000, 10)
 arr_bottom      = widgets.Dropdown(
@@ -614,23 +716,38 @@ arr_bottom      = widgets.Dropdown(
     value='sand', description='Bottom type:',
     style={'description_width': '120px'}, layout=widgets.Layout(width='300px')
 )
-arr_rx_range = _slider('Rx range (km)', 30, 0.5, 300, 0.5)
-arr_rx_depth = _slider('Rx depth (m)',  100, 1, 4999, 1)
+arr_rx_range = _slider('Rx range (km)',  65, 0.5, 300, 0.5)
+arr_rx_depth = _slider('Rx depth (m)', 1300, 1, 4999, 1)
 arr_fs       = _slider('Sample rate fs (Hz)', 8000, 1000, 50000, 500)
 arr_run_btn  = widgets.Button(description='▶ Compute Arrivals', button_style='primary',
                                layout=widgets.Layout(width='220px'))
 arr_out      = widgets.Output()
 arr_stats    = widgets.HTML('')
+arr_warn     = widgets.HTML('')
+
+def _arr_check(_=None):
+    msgs = []
+    sd, wd = arr_src_depth.value, arr_water_depth.value
+    rd, rng = arr_rx_depth.value, arr_rx_range.value
+    if sd >= wd:
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+    if rd >= wd:
+        msgs.append(f'⚠ Rx depth ({rd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+    if abs(rd - sd) > 500 and rng < 20:
+        msgs.append(f'⚠ Source ({sd:.0f} m) and Rx ({rd:.0f} m) are far apart in depth at only {rng:.0f} km range — few or no arrivals likely. Try range > 20 km or match source/Rx depths.')
+    if abs(rd - sd) < 200 and rng < 60:
+        msgs.append(f'ℹ Source and Rx near same depth ({sd:.0f} m) at {rng:.0f} km — SOFAR cycle ≈ 65 km, so most oscillating rays miss this receiver. Try range ≈ 65 km for the first convergence zone (many arrivals).')
+    arr_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
+
+for _w in [arr_src_depth, arr_water_depth, arr_rx_depth, arr_rx_range]:
+    _w.observe(_arr_check, names='value')
+_arr_check()
 
 def _run_arrivals(_=None):
-    with arr_out:
-        clear_output(wait=True)
-        print('Running BELLHOP arrivals computation...')
     water_depth = arr_water_depth.value
     src_depth = min(arr_src_depth.value, water_depth - 1)
     rx_depth  = min(arr_rx_depth.value,  water_depth - 1)
-    ssp = _locked_ssp['ssp']
-    ssp_use = eb._clip_ssp(ssp, water_depth)
+    ssp_use   = eb._clip_ssp(_locked_ssp['ssp'], water_depth)
 
     env = pm.create_env2d(
         depth=water_depth,
@@ -639,65 +756,160 @@ def _run_arrivals(_=None):
         tx_depth=src_depth,
         rx_depth=np.array([rx_depth]),
         rx_range=np.array([arr_rx_range.value]),
-        nbeams=500,
+        nbeams=200,
     )
     eb._apply_bottom(env, arr_bottom.value)
 
-    arr = pm.compute_arrivals(env)
+    with arr_out:
+        clear_output(wait=True)
+        print(f'Running BELLHOP arrivals — src={src_depth:.0f} m  rx={rx_depth:.0f} m @ {arr_rx_range.value:.1f} km ...')
+
+    try:
+        arr = pm.compute_arrivals(env)
+    except ValueError:
+        # pandas ≥2.0: pd.concat([]) raises ValueError when BELLHOP finds no arrivals
+        with arr_out:
+            clear_output(wait=True)
+            print('No arrivals found (BELLHOP returned empty result).')
+            print('Suggestions:')
+            print('  • Increase range (try ≥ 50 km for deep water Munk profile)')
+            print('  • Match Rx depth to source depth for maximum energy coupling')
+            print('  • Verify source depth < water depth')
+        return
+    except Exception as exc:
+        import traceback
+        with arr_out:
+            clear_output(wait=True)
+            print(f'BELLHOP error: {type(exc).__name__}: {exc}')
+            traceback.print_exc()
+        return
+
     _arr_result['arr'] = arr
     _arr_result['env'] = env
 
     with arr_out:
         clear_output(wait=True)
-        if arr is None or len(arr) == 0:
-            print('No arrivals returned. Try increasing range or adjusting source/rx depth.')
-            return
+        try:
+            if arr is None or len(arr) == 0:
+                print('No arrivals returned (empty DataFrame).')
+                print('Try a longer range or different geometry.')
+                return
 
-        stats = ut.compute_arrival_stats(arr)
-        arr_stats.value = (
-            f'<b>Arrivals:</b> {stats["n_arrivals"]} paths  |  '
-            f'Delay spread: <b>{stats["delay_spread_ms"]:.2f} ms</b>  |  '
-            f'Coherence BW: <b>{stats["coherence_bandwidth_hz"]:.1f} Hz</b>  |  '
-            f'Dominance ratio: <b>{stats["dominance_ratio"]:.1f}×</b>'
-        )
+            _amp_col = 'arrival_amplitude' if 'arrival_amplitude' in arr.columns else 'amplitude'
+            if 'time_of_arrival' not in arr.columns or _amp_col not in arr.columns:
+                print(f'Unexpected arrival columns: {list(arr.columns)}')
+                print('Expected: time_of_arrival, arrival_amplitude (or amplitude)')
+                return
 
-        fig, axes = plt.subplots(1, 2, figsize=(16, 4))
+            times_s = np.asarray(arr['time_of_arrival'], dtype=float)
+            amps    = np.abs(np.asarray(arr[_amp_col], dtype=complex))
+            valid   = np.isfinite(times_s) & np.isfinite(amps) & (amps > 0)
+            times_s = times_s[valid]
+            amps    = amps[valid]
 
-        # Arrivals stem plot
-        if 'time_of_arrival' in arr.columns and 'amplitude' in arr.columns:
-            times_ms = np.asarray(arr['time_of_arrival'], dtype=float) * 1000.0
-            amps = np.abs(np.asarray(arr['amplitude'], dtype=complex))
-            if amps.max() > 0:
-                amps_n = amps / amps.max()
+            if len(times_s) == 0:
+                print(f'All {len(arr)} arrivals have NaN or zero amplitude.')
+                print('BELLHOP may have found eigenrays but with negligible energy.')
+                print('Try: match Rx depth to source depth, or increase range.')
+                return
+
+            delay_ms = (times_s - times_s.min()) * 1000.0
+            amps_n   = amps / amps.max()
+            spread   = float(delay_ms.max())
+
+            if spread > 0:
+                arr_stats.value = (
+                    f'<b>Arrivals:</b> {len(times_s)} paths  |  '
+                    f'Delay spread: <b>{spread:.2f} ms</b>  |  '
+                    f'Coherence BW: <b>{1000.0 / spread:.1f} Hz</b>'
+                )
             else:
-                amps_n = amps
-            axes[0].stem(times_ms, amps_n, linefmt='#1a6fa3', markerfmt='o', basefmt='k-')
-            axes[0].set_xlabel('Arrival Time (ms)', fontsize=11)
+                arr_stats.value = (
+                    f'<b>Arrivals:</b> {len(times_s)} paths  |  '
+                    f'Single eigenray (0 ms spread)'
+                )
+
+            # ── Bounce-count colors ───────────────────────────────────────────
+            _bp = ['#1a6fa3', '#27ae60', '#e67e22', '#c0392b']
+            if 'surface_bounces' in arr.columns and 'bottom_bounces' in arr.columns:
+                _n_tot = (np.asarray(arr['surface_bounces'], dtype=int) +
+                          np.asarray(arr['bottom_bounces'],  dtype=int))[valid]
+                _colors = [_bp[min(int(n), 3)] for n in _n_tot]
+            else:
+                _colors = [_bp[0]] * len(delay_ms)
+
+            fig, axes = plt.subplots(1, 2, figsize=(16, 4))
+
+            # ── Left: multipath arrivals ──────────────────────────────────────
+            x_span = max(spread, 1.0)
+            axes[0].vlines(delay_ms, 0, amps_n, colors=_colors, linewidth=2, alpha=0.85)
+            axes[0].scatter(delay_ms, amps_n, c=_colors, s=60, zorder=5)
+            axes[0].axhline(0, color='k', linewidth=0.8)
+            axes[0].set_xlim(-x_span * 0.05, x_span * 1.15)
+            axes[0].set_ylim(-0.05, 1.15)
+            axes[0].set_xlabel('Delay relative to first arrival (ms)', fontsize=11)
             axes[0].set_ylabel('Normalized Amplitude', fontsize=11)
             axes[0].set_title(
-                f'Multipath Arrivals  |  {stats["n_arrivals"]} paths  |  '
+                f'Multipath Arrivals  |  {len(times_s)} paths  |  '
+                f'spread={spread:.2f} ms  |  '
                 f'f={arr_freq.value:.0f} Hz  |  '
-                f'Rx: {arr_rx_range.value:.1f} km, {rx_depth:.0f} m',
-                fontsize=11
+                f'Rx {arr_rx_range.value:.0f} km / {rx_depth:.0f} m',
+                fontsize=10
             )
             axes[0].grid(True, alpha=0.25)
-            axes[0].set_ylim(-0.05, 1.15)
+            # Bounce legend
+            from matplotlib.lines import Line2D as _L2D
+            _leg = [_L2D([0],[0], color=c, lw=2, label=lbl)
+                    for c, lbl in zip(_bp, ['0 bounces', '1 bounce', '2 bounces', '3+ bounces'])]
+            axes[0].legend(handles=_leg, fontsize=8, loc='upper right')
 
-        # Impulse response
-        fs = arr_fs.value
-        ir = ut.channel_to_impulse_response(arr, fs=fs)
-        t_ms = np.arange(len(ir)) / fs * 1000.0
-        axes[1].stem(t_ms, np.abs(ir), linefmt='#e67e22', markerfmt='o', basefmt='k-')
-        axes[1].set_xlabel('Time (ms)', fontsize=11)
-        axes[1].set_ylabel('Amplitude', fontsize=11)
-        axes[1].set_title(
-            f'Channel Impulse Response  |  fs={fs:.0f} Hz  |  '
-            f'ISI taps ≈ {int(stats["delay_spread_ms"]/1000 * fs)}',
-            fontsize=11
-        )
-        axes[1].grid(True, alpha=0.25)
+            # ── Right: channel impulse response ───────────────────────────────
+            fs      = arr_fs.value
+            ir      = ut.channel_to_impulse_response(arr, fs=fs)
+            t_ms    = np.arange(len(ir)) / fs * 1000.0
+            ir_abs  = np.abs(ir)
+            ir_max  = float(ir_abs.max()) if ir_abs.max() > 0 else 1.0
+            ir_norm = ir_abs / ir_max      # normalize: weak arrivals visible
+            sig     = ir_norm > 0
+            if sig.any():
+                axes[1].vlines(t_ms[sig], 0, ir_norm[sig],
+                               colors='#e67e22', linewidth=2, alpha=0.85)
+                axes[1].scatter(t_ms[sig], ir_norm[sig], color='#e67e22', s=50, zorder=5)
+                x2_span = max(float(t_ms[sig].max()), 1.0)
+                axes[1].set_xlim(-x2_span * 0.05, x2_span * 1.15)
+            axes[1].axhline(0, color='k', linewidth=0.8)
+            axes[1].set_ylim(-0.05, 1.15)
+            stats_val = ut.compute_arrival_stats(arr)
+            isi_taps  = int(stats_val.get('delay_spread_ms', 0) / 1000.0 * fs)
+            axes[1].set_xlabel('Delay (ms)', fontsize=11)
+            axes[1].set_ylabel('Normalized Amplitude', fontsize=11)
+            axes[1].set_title(
+                f'Channel Impulse Response  |  fs={fs:.0f} Hz  |  ISI taps ≈ {isi_taps}',
+                fontsize=11
+            )
+            axes[1].grid(True, alpha=0.25)
 
-        show_fig(fig)
+            show_fig(fig)
+
+        except Exception as _plot_err:
+            import traceback
+            print(f'Plotting error: {type(_plot_err).__name__}: {_plot_err}')
+            print()
+            print('--- Diagnostic ---')
+            if arr is not None and len(arr) > 0:
+                print(f'Columns : {list(arr.columns)}')
+                print(f'Rows    : {len(arr)}')
+                _ac = 'arrival_amplitude' if 'arrival_amplitude' in arr.columns else 'amplitude'
+                if 'time_of_arrival' in arr.columns and _ac in arr.columns:
+                    _t = np.asarray(arr['time_of_arrival'], dtype=float)
+                    _a = np.abs(np.asarray(arr[_ac], dtype=complex))
+                    _v = np.isfinite(_t) & np.isfinite(_a) & (_a > 0)
+                    print(f'Valid   : {int(_v.sum())}/{len(arr)}')
+                    if _v.sum() > 0:
+                        print(f'Time    : {_t[_v].min():.4f}–{_t[_v].max():.4f} s '
+                              f'(spread={1000*(_t[_v].max()-_t[_v].min()):.2f} ms)')
+                        print(f'Amp     : {_a[_v].min():.3e}–{_a[_v].max():.3e}')
+            traceback.print_exc()
 
 arr_run_btn.on_click(_run_arrivals)
 
@@ -706,6 +918,7 @@ display(widgets.VBox([
     widgets.HBox([arr_freq, arr_bottom]),
     widgets.HBox([arr_rx_range, arr_rx_depth]),
     arr_fs,
+    arr_warn,
     arr_run_btn,
     arr_stats,
     arr_out,
@@ -735,7 +948,7 @@ sc_name       = widgets.Text(value='Scenario 1', description='Name:',
                               style={'description_width': '80px'},
                               layout=widgets.Layout(width='280px'))
 sc_water_d    = _slider('Water depth (m)',  5000, 200, 6000, 50)
-sc_src_d      = _slider('Source depth (m)',  100, 1, 4999, 1)
+sc_src_d      = _slider('Source depth (m)', 1300, 1, 4999, 1)
 sc_freq       = _slider('Frequency (Hz)',    500, 10, 5000, 10)
 sc_bottom     = widgets.Dropdown(
     options=['sand', 'mud', 'gravel', 'rock'],
@@ -750,7 +963,18 @@ sc_compare_btn= widgets.Button(description='📊 Compare Scenarios', button_styl
 sc_clear_btn  = widgets.Button(description='🗑 Clear All', button_style='danger',
                                 layout=widgets.Layout(width='150px'))
 sc_list_html  = widgets.HTML('<i>No scenarios saved yet.</i>')
+sc_warn       = widgets.HTML('')
 sc_out        = widgets.Output()
+
+def _sc_check(_=None):
+    msgs = []
+    if sc_src_d.value >= sc_water_d.value:
+        msgs.append(f'⚠ Source depth ({sc_src_d.value:.0f} m) ≥ water depth ({sc_water_d.value:.0f} m) — will be clamped on save.')
+    sc_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
+
+for _w in [sc_src_d, sc_water_d]:
+    _w.observe(_sc_check, names='value')
+_sc_check()
 
 def _update_sc_list():
     if not _scenarios:
@@ -874,6 +1098,7 @@ display(widgets.VBox([
     widgets.HBox([sc_name, sc_bottom]),
     widgets.HBox([sc_water_d, sc_src_d]),
     widgets.HBox([sc_freq, sc_max_range]),
+    sc_warn,
     widgets.HBox([sc_save_btn, sc_compare_btn, sc_clear_btn]),
     sc_list_html,
     sc_out,
@@ -905,13 +1130,17 @@ sn_sl  = _slider('SL — Source Level (dB)',      200, 140, 240, 1)
 sn_nl  = _slider('NL — Noise Level (dB)',        60, 30, 100, 1)
 sn_di  = _slider('DI — Directivity Index (dB)',   0, 0, 40, 1)
 sn_dt  = _slider('DT — Detection Threshold (dB)',  10, 0, 30, 1)
-sn_tl_manual = _slider('TL — Manual entry (dB)',  80, 20, 150, 1)
+sn_tl_manual = _slider('TL (dB)', 80, 20, 150, 0.1)
+sn_tl_range  = _slider('Lookup range (km)',  50, 0.5, 500, 0.5)
+sn_tl_depth  = _slider('Lookup depth (m)', 1300, 0, 5000, 10)
 sn_tl_from4  = widgets.Button(
     description='Pull TL from Section 4',
     button_style='info', layout=widgets.Layout(width='220px')
 )
-sn_tl_range = _slider('TL at range (km)', 50, 0.5, 500, 0.5)
-sn_tl_depth = _slider('TL at depth (m)',  100, 0, 5000, 10)
+sn_pull_status = widgets.HTML(
+    '<i style="color:gray">Set the lookup range/depth above, then click the button '
+    'to read TL at that point from the Section 4 map.</i>'
+)
 sn_out = widgets.Output()
 
 _sonar_state = {'tl': 80.0}
@@ -920,7 +1149,6 @@ def _update_sonar(_=None):
     tl = _sonar_state['tl']
     snr = ut.compute_snr_estimate(tl, sn_sl.value, sn_nl.value, sn_di.value)
     margin = snr - sn_dt.value
-    color = 'green' if margin >= 0 else 'red'
     verdict = 'DETECTED ✓' if margin >= 0 else 'NOT DETECTED ✗'
     with sn_out:
         clear_output(wait=True)
@@ -936,21 +1164,41 @@ def _update_sonar(_=None):
 def _pull_tl_from_sec4(_=None):
     tl_df = _tl_result.get('tl')
     if tl_df is None:
-        sn_tl_manual.description = 'TL (no Section 4 data)'
+        sn_pull_status.value = (
+            '<span style="color:red;font-weight:bold">'
+            '⚠ No TL data found. In Section 4: set parameters, then click '
+            '<b>▶ Run TL Map</b>. The status line will turn green when ready.</span>'
+        )
         return
-    depths = np.asarray(tl_df.index, dtype=float)
-    ranges = np.asarray(tl_df.columns, dtype=float)
-    d_idx = int(np.argmin(np.abs(depths - sn_tl_depth.value)))
-    r_idx = int(np.argmin(np.abs(ranges - sn_tl_range.value)))
-    p_val = float(np.abs(complex(tl_df.iloc[d_idx, r_idx])))
-    tl_val = float(-20.0 * np.log10(p_val)) if p_val > 1e-10 else 120.0
-    _sonar_state['tl'] = tl_val
-    sn_tl_manual.value = tl_val
-    sn_tl_manual.description = f'TL from Sec4 @ {ranges[r_idx]:.0f}km/{depths[d_idx]:.0f}m'
+
+    depths  = np.asarray(tl_df.index,   dtype=float)
+    ranges  = np.asarray(tl_df.columns, dtype=float)
+    d_idx   = int(np.argmin(np.abs(depths - sn_tl_depth.value)))
+    r_idx   = int(np.argmin(np.abs(ranges - sn_tl_range.value)))
+    p_val   = float(np.abs(complex(tl_df.iloc[d_idx, r_idx])))
+    tl_val  = float(-20.0 * np.log10(p_val)) if p_val > 1e-10 else 120.0
+
+    # Clamp to slider range before setting (avoids silent widget clamp)
+    tl_clamped = float(np.clip(tl_val, 20, 150))
+    _sonar_state['tl'] = tl_clamped
+    sn_tl_manual.value  = tl_clamped
+
+    actual_r = float(ranges[r_idx])
+    actual_d = float(depths[d_idx])
+    sn_pull_status.value = (
+        f'<span style="color:green;font-weight:bold">'
+        f'✓ Pulled TL = {tl_val:.1f} dB '
+        f'from Section 4 at {actual_r:.1f} km / {actual_d:.0f} m depth</span>'
+        + (f'<br><span style="color:gray;font-size:0.85em">'
+           f'(Nearest computed point to your lookup sliders)</span>'
+           if abs(actual_r - sn_tl_range.value) > 1 or abs(actual_d - sn_tl_depth.value) > 50
+           else '')
+    )
     _update_sonar()
 
 def _manual_tl_changed(change):
     _sonar_state['tl'] = change['new']
+    sn_pull_status.value = '<i style="color:gray">TL set manually.</i>'
     _update_sonar()
 
 for w in [sn_sl, sn_nl, sn_di, sn_dt]:
@@ -963,9 +1211,14 @@ _update_sonar()
 display(widgets.VBox([
     widgets.HBox([sn_sl, sn_nl]),
     widgets.HBox([sn_di, sn_dt]),
-    widgets.HTML('<hr><b>Transmission Loss (TL)</b>'),
+    widgets.HTML('<hr><b>Transmission Loss (TL)</b><br>'
+                 '<span style="color:gray;font-size:0.9em">'
+                 'Either drag the slider to enter TL manually, or use the Section 4 lookup below.</span>'),
     sn_tl_manual,
-    widgets.HBox([sn_tl_range, sn_tl_depth, sn_tl_from4]),
+    widgets.HTML('<b>Section 4 TL lookup</b> — set range &amp; depth, then click the button:'),
+    widgets.HBox([sn_tl_range, sn_tl_depth]),
+    widgets.HBox([sn_tl_from4, sn_pull_status]),
+    widgets.HTML('<hr>'),
     sn_out,
 ]))
 """))
@@ -1088,8 +1341,9 @@ def draw_frame(frame_idx):
         cmap = plt.cm.RdYlBu
         n_r = len(rays)
         for i, (_, row) in enumerate(rays.iterrows()):
-            if 'x' in row and 'y' in row:
-                ax.plot(np.asarray(row['x']), np.asarray(row['y']),
+            if 'ray' in row.index:
+                rp = np.asarray(row['ray'])
+                ax.plot(rp[:, 0] * 1000, rp[:, 1],
                         color=cmap(i / max(n_r - 1, 1)), linewidth=0.7, alpha=0.6)
 
     ax.plot(0, src_d, 'r*', markersize=16, zorder=10)
@@ -1292,8 +1546,9 @@ if rays_rd is not None:
     cmap = plt.cm.RdYlBu
     n_r = len(rays_rd)
     for i, (_, row) in enumerate(rays_rd.iterrows()):
-        if 'x' in row and 'y' in row:
-            ax_r.plot(np.asarray(row['x']), np.asarray(row['y']),
+        if 'ray' in row.index:
+            rp = np.asarray(row['ray'])
+            ax_r.plot(rp[:, 0] * 1000, rp[:, 1],
                       color=cmap(i / max(n_r-1, 1)), linewidth=0.7, alpha=0.55)
 
 ax_r.plot(0, 50, 'r*', markersize=16, zorder=10, label='Source (50 m, shelf)')

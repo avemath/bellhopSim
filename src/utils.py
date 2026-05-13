@@ -131,6 +131,13 @@ def find_convergence_zones(tl_data, threshold_db=5.0, reference_depth_idx=None):
     return cz_ranges
 
 
+def _amp_col(df):
+    """Return the amplitude column name used by this arlpy version."""
+    if 'arrival_amplitude' in df.columns:
+        return 'arrival_amplitude'
+    return 'amplitude'
+
+
 def channel_to_impulse_response(arr_data, fs=10000.0, duration=None, rx_range_km=None, rx_depth_m=None):
     """Convert BELLHOP arrivals to a discrete-time channel impulse response.
 
@@ -180,12 +187,13 @@ def channel_to_impulse_response(arr_data, fs=10000.0, duration=None, rx_range_km
         except Exception:
             pass
 
-    if 'time_of_arrival' not in df.columns or 'amplitude' not in df.columns:
+    amp_col = _amp_col(df)
+    if 'time_of_arrival' not in df.columns or amp_col not in df.columns:
         n_samples = int((duration or 0.1) * fs)
         return np.zeros(n_samples, dtype=complex)
 
     times = np.asarray(df['time_of_arrival'], dtype=float)
-    amps = np.asarray(df['amplitude'], dtype=complex)
+    amps = np.asarray(df[amp_col], dtype=complex)
 
     # Remove invalid entries
     valid = np.isfinite(times) & np.isfinite(np.abs(amps))
@@ -245,10 +253,11 @@ def compute_arrival_stats(arr_data):
     if arr_data is None or len(arr_data) == 0:
         return stats
 
-    if 'amplitude' not in arr_data.columns or 'time_of_arrival' not in arr_data.columns:
+    amp_col = _amp_col(arr_data)
+    if amp_col not in arr_data.columns or 'time_of_arrival' not in arr_data.columns:
         return stats
 
-    amps = np.abs(np.asarray(arr_data['amplitude'], dtype=complex))
+    amps = np.abs(np.asarray(arr_data[amp_col], dtype=complex))
     times = np.asarray(arr_data['time_of_arrival'], dtype=float)
 
     valid = np.isfinite(amps) & np.isfinite(times) & (amps > 0)
