@@ -1,0 +1,8 @@
+numpy>=1.24
+scipy>=1.10
+matplotlib>=3.7
+ipywidgets>=8.0
+jupyterlab>=4.0
+notebook>=7.0
+arlpy>=1.9
+pandas>=2.0
