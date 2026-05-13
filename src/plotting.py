@@ -222,15 +222,13 @@ def plot_transmission_loss(tl_data, env, ax=None, dynamic_range=60, title=None, 
         return ax, None
 
     # tl_data: DataFrame index=depths, columns=ranges
+    # arlpy returns complex pressure amplitudes (|p| << 1), not TL in dB.
+    # Convert: TL_dB = -20 * log10(|p|)
     depths = np.asarray(tl_data.index, dtype=float)
     ranges_km = np.asarray(tl_data.columns, dtype=float)
-    tl_matrix = np.asarray(tl_data.values, dtype=float)
-
-    # Take absolute value (TL is positive in dB)
-    tl_matrix = np.abs(tl_matrix)
-
-    # Replace zeros/very small values
-    tl_matrix = np.where(tl_matrix < 1.0, np.nan, tl_matrix)
+    pressure_abs = np.abs(np.asarray(tl_data.values, dtype=complex))
+    pressure_abs = np.where(pressure_abs < 1e-10, np.nan, pressure_abs)
+    tl_matrix = -20.0 * np.log10(pressure_abs)
 
     vmin = np.nanmin(tl_matrix)
     vmax = vmin + dynamic_range
@@ -303,7 +301,9 @@ def plot_tl_slice(tl_data, depth_m, env, ax=None, title=None, color=WATER_COLOR)
     depth_idx = int(np.argmin(np.abs(depths - depth_m)))
     actual_depth = depths[depth_idx]
 
-    tl_slice = np.abs(np.asarray(tl_data.iloc[depth_idx, :], dtype=float))
+    pressure_abs = np.abs(np.asarray(tl_data.iloc[depth_idx, :], dtype=complex))
+    pressure_abs = np.where(pressure_abs < 1e-10, np.nan, pressure_abs)
+    tl_slice = -20.0 * np.log10(pressure_abs)
 
     ax.plot(ranges_km, tl_slice, color=color, linewidth=2,
             label=f'TL at {actual_depth:.0f} m depth')
@@ -470,7 +470,9 @@ def plot_scenario_comparison(tl_results, labels, env_list, depth_m=None):
         d_ref = depth_m if depth_m is not None else float(env.get('tx_depth', depths[len(depths)//2]))
         depth_idx = int(np.argmin(np.abs(depths - d_ref)))
 
-        tl_slice = np.abs(np.asarray(tl.iloc[depth_idx, :], dtype=float))
+        p_abs = np.abs(np.asarray(tl.iloc[depth_idx, :], dtype=complex))
+        p_abs = np.where(p_abs < 1e-10, np.nan, p_abs)
+        tl_slice = -20.0 * np.log10(p_abs)
         ax.plot(ranges_km, tl_slice, color=colors[i], linewidth=2, label=label)
 
     ax.invert_yaxis()

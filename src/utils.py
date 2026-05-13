@@ -109,7 +109,10 @@ def find_convergence_zones(tl_data, threshold_db=5.0, reference_depth_idx=None):
     if reference_depth_idx is None:
         reference_depth_idx = len(depths) // 2
 
-    tl_slice = np.abs(np.asarray(tl_data.iloc[reference_depth_idx, :], dtype=float))
+    # arlpy returns complex pressure; convert to TL dB = -20*log10(|p|)
+    pressure_abs = np.abs(np.asarray(tl_data.iloc[reference_depth_idx, :], dtype=complex))
+    pressure_abs = np.where(pressure_abs < 1e-10, np.nan, pressure_abs)
+    tl_slice = -20.0 * np.log10(pressure_abs)
 
     # Remove NaN/zero
     valid = np.isfinite(tl_slice) & (tl_slice > 0)
