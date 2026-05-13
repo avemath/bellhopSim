@@ -98,11 +98,16 @@ import ipywidgets as widgets
 from IPython.display import display, clear_output
 
 # ── Project modules ───────────────────────────────────────────────────────────
-import src.bellhop_config as bc          # BELLHOP path + WSL patch (import FIRST)
-import src.profiles as prof              # Sound speed profile library
-import src.environment_builder as eb     # Environment dictionary builders
-import src.plotting as pl                # Plotting functions
-import src.utils as ut                   # Post-processing utilities
+# importlib.reload ensures we always run the on-disk version, not a stale
+# bytecode cache from a previous kernel session.
+import importlib
+import src.bellhop_config as bc
+import src.profiles as prof
+import src.environment_builder as eb
+import src.plotting as pl
+import src.utils as ut
+for _mod in [bc, prof, eb, pl, ut]:
+    importlib.reload(_mod)
 
 # ── Configure BELLHOP ─────────────────────────────────────────────────────────
 bc.configure(verbose=True)
