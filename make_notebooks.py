@@ -87,13 +87,12 @@ using interactive sliders and dropdowns.
     cells.append(md_cell("## Section 1 — Setup and Configuration"))
 
     cells.append(code_cell("""\
+%matplotlib widget
 # ── Core imports ──────────────────────────────────────────────────────────────
 import sys, os
 sys.path.insert(0, os.path.join(os.getcwd(), '..'))   # add project root to path
 
 import numpy as np
-import matplotlib
-matplotlib.use('widget')                               # interactive plots in JupyterLab
 import matplotlib.pyplot as plt
 import ipywidgets as widgets
 from IPython.display import display, clear_output
@@ -989,12 +988,11 @@ Advanced multi-scenario analyses built on top of the main interactive notebook.
 
     # Setup
     cells.append(code_cell("""\
+%matplotlib widget
 import sys, os
 sys.path.insert(0, os.path.join(os.getcwd(), '..'))
 
 import numpy as np
-import matplotlib
-matplotlib.use('widget')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from IPython.display import display, clear_output, HTML
