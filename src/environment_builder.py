@@ -206,9 +206,11 @@ def _clip_ssp(ssp, max_depth):
         mask = arr[:, 0] <= max_depth
         arr = arr[mask]
         if arr[-1, 0] < max_depth:
-            # Interpolate to exactly max_depth
+            # Interpolate to exactly max_depth using the original (unclipped) ssp
+            # so that the interpolation brackets max_depth correctly.
             from scipy.interpolate import interp1d
-            f = interp1d(ssp[:, 0], ssp[:, 1], fill_value='extrapolate')
+            orig = np.asarray(ssp, dtype=float)
+            f = interp1d(orig[:, 0], orig[:, 1], fill_value='extrapolate')
             arr = np.vstack([arr, [max_depth, float(f(max_depth))]])
 
     return arr
