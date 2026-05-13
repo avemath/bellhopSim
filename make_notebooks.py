@@ -87,6 +87,7 @@ using interactive sliders and dropdowns.
     cells.append(md_cell("## Section 1 — Setup and Configuration"))
 
     cells.append(code_cell("""\
+import ipympl                                          # must be imported before matplotlib
 %matplotlib widget
 # ── Core imports ──────────────────────────────────────────────────────────────
 import sys, os
@@ -988,6 +989,7 @@ Advanced multi-scenario analyses built on top of the main interactive notebook.
 
     # Setup
     cells.append(code_cell("""\
+import ipympl                                          # must be imported before matplotlib
 %matplotlib widget
 import sys, os
 sys.path.insert(0, os.path.join(os.getcwd(), '..'))
