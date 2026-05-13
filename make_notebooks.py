@@ -114,6 +114,20 @@ print("\\n=== arlpy default environment ===")
 pm.print_env(pm.create_env2d())
 """))
 
+    # Helper cell: show_fig used by all widget callbacks
+    cells.append(code_cell("""\
+def show_fig(fig):
+    \"\"\"Render a matplotlib figure inside an Output widget and close it.
+
+    With %matplotlib inline, plt.show() fires at cell-end, not inside
+    widget callbacks. display(fig) explicitly pushes the figure into the
+    current Output context, and plt.close() prevents a second render.
+    \"\"\"
+    plt.tight_layout()
+    display(fig)
+    plt.close(fig)
+"""))
+
     cells.append(code_cell("""\
 # ── Quick sanity test (runs a ~1-second BELLHOP job) ─────────────────────────
 ok = bc.quick_test()
@@ -254,8 +268,7 @@ def _update_ssp(_=None):
         clear_output(wait=True)
         fig, ax = plt.subplots(figsize=(4.5, 7))
         pl.plot_ssp(ssp, ax=ax, title=f'{w_profile.value} Profile')
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
 def _on_profile_change(change):
     p = change['new']
@@ -401,8 +414,7 @@ def _run_ray_trace(_=None):
         ax_ray.grid(True, alpha=0.2)
         ax_ray.legend(fontsize=9)
 
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
         rt_stats.value = (
             f'<b>Ray statistics:</b>  '
@@ -531,8 +543,7 @@ def _run_tl(_=None):
         else:
             tl_stats.value = f'<b>No convergence zones detected</b> | Run type: {tl_run_type.value}'
 
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
 def _plot_tl_slice(_=None):
     tl = _tl_result.get('tl')
@@ -546,8 +557,7 @@ def _plot_tl_slice(_=None):
         clear_output(wait=True)
         fig, ax = plt.subplots(figsize=(11, 4))
         pl.plot_tl_slice(tl, tl_slice_depth.value, env, ax=ax)
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
 tl_run_btn.on_click(_run_tl)
 tl_slice_btn.on_click(_plot_tl_slice)
@@ -682,8 +692,7 @@ def _run_arrivals(_=None):
         )
         axes[1].grid(True, alpha=0.25)
 
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
 arr_run_btn.on_click(_run_arrivals)
 
@@ -805,7 +814,9 @@ def _compare_scenarios(_=None):
             ranges_km = np.asarray(tl.columns, dtype=float)
             d_ref = s['src_depth']
             d_idx = int(np.argmin(np.abs(depths - d_ref)))
-            tl_slice = np.abs(np.asarray(tl.iloc[d_idx, :], dtype=float))
+            p_abs = np.abs(np.asarray(tl.iloc[d_idx, :], dtype=complex))
+            p_abs = np.where(p_abs < 1e-10, np.nan, p_abs)
+            tl_slice = -20.0 * np.log10(p_abs)
             axes[0].plot(ranges_km, tl_slice, color=colors[i], linewidth=2, label=label)
 
         # SSP overlay
@@ -828,8 +839,7 @@ def _compare_scenarios(_=None):
         axes[1].legend(fontsize=9)
 
         plt.suptitle('Scenario Comparison', fontsize=14, fontweight='bold')
-        plt.tight_layout()
-        plt.show()
+        show_fig(fig)
 
         # Summary table
         import pandas as pd
@@ -927,7 +937,8 @@ def _pull_tl_from_sec4(_=None):
     ranges = np.asarray(tl_df.columns, dtype=float)
     d_idx = int(np.argmin(np.abs(depths - sn_tl_depth.value)))
     r_idx = int(np.argmin(np.abs(ranges - sn_tl_range.value)))
-    tl_val = float(np.abs(tl_df.iloc[d_idx, r_idx]))
+    p_val = float(np.abs(complex(tl_df.iloc[d_idx, r_idx])))
+    tl_val = float(-20.0 * np.log10(p_val)) if p_val > 1e-10 else 120.0
     _sonar_state['tl'] = tl_val
     sn_tl_manual.value = tl_val
     sn_tl_manual.description = f'TL from Sec4 @ {ranges[r_idx]:.0f}km/{depths[d_idx]:.0f}m'
@@ -1158,8 +1169,9 @@ for i, freq in enumerate(sweep_freqs):
         continue
     depths = np.asarray(tl.index, dtype=float)
     ranges_km = np.asarray(tl.columns, dtype=float)
-    tl_matrix = np.abs(np.asarray(tl.values, dtype=float))
-    tl_matrix = np.where(tl_matrix < 1, np.nan, tl_matrix)
+    p_abs = np.abs(np.asarray(tl.values, dtype=complex))
+    p_abs = np.where(p_abs < 1e-10, np.nan, p_abs)
+    tl_matrix = -20.0 * np.log10(p_abs)
     vmin = np.nanmin(tl_matrix)
     im = axes[i].pcolormesh(ranges_km, depths, tl_matrix,
                              vmin=vmin, vmax=vmin+70, cmap='jet', shading='auto')
@@ -1176,7 +1188,8 @@ axes[-1].set_xlabel('Range (km)', fontsize=11)
 plt.suptitle('Frequency Sweep — Transmission Loss vs Frequency\\nMunk Profile, 5000 m depth',
              fontsize=13, fontweight='bold', y=1.002)
 plt.tight_layout()
-plt.show()
+display(fig)
+plt.close(fig)
 """))
 
     cells.append(code_cell("""\
@@ -1190,7 +1203,9 @@ for i, freq in enumerate(sweep_freqs):
     depths = np.asarray(tl.index, dtype=float)
     ranges_km = np.asarray(tl.columns, dtype=float)
     d_idx = int(np.argmin(np.abs(depths - sweep_src)))
-    tl_slice = np.abs(np.asarray(tl.iloc[d_idx, :], dtype=float))
+    p_abs = np.abs(np.asarray(tl.iloc[d_idx, :], dtype=complex))
+    p_abs = np.where(p_abs < 1e-10, np.nan, p_abs)
+    tl_slice = -20.0 * np.log10(p_abs)
     ax.plot(ranges_km, tl_slice, color=colors[i], linewidth=2,
             label=f'{freq} Hz')
 
@@ -1201,7 +1216,8 @@ ax.set_title(f'TL at Source Depth ({sweep_src:.0f} m) vs Range — Frequency Com
 ax.grid(True, alpha=0.25)
 ax.legend(title='Frequency', fontsize=10)
 plt.tight_layout()
-plt.show()
+display(fig)
+plt.close(fig)
 """))
 
     # ---- 3. Range-Dependent Bathymetry ----
@@ -1288,8 +1304,9 @@ ax_r.legend(fontsize=9)
 if tl_rd is not None:
     depths = np.asarray(tl_rd.index, dtype=float)
     ranges_km = np.asarray(tl_rd.columns, dtype=float)
-    tl_mat = np.abs(np.asarray(tl_rd.values, dtype=float))
-    tl_mat = np.where(tl_mat < 1, np.nan, tl_mat)
+    p_abs = np.abs(np.asarray(tl_rd.values, dtype=complex))
+    p_abs = np.where(p_abs < 1e-10, np.nan, p_abs)
+    tl_mat = -20.0 * np.log10(p_abs)
     vmin = np.nanmin(tl_mat)
     im = axes[1].pcolormesh(ranges_km, depths, tl_mat,
                              vmin=vmin, vmax=vmin+70, cmap='jet', shading='auto')
@@ -1304,7 +1321,8 @@ if tl_rd is not None:
     plt.colorbar(im, ax=axes[1], label='TL (dB)', fraction=0.025)
 
 plt.tight_layout()
-plt.show()
+display(fig)
+plt.close(fig)
 """))
 
     # ---- 4. Comms Simulator ----
@@ -1460,7 +1478,8 @@ plt.suptitle(
     fontsize=12, fontweight='bold'
 )
 plt.tight_layout()
-plt.show()
+display(fig)
+plt.close(fig)
 
 isi_taps = int(stats["delay_spread_ms"]/1000 * comm_fs / sps)
 print(f'\\nISI length: {isi_taps} symbols  (equalizer must span at least this many taps)')
