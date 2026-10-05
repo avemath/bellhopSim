@@ -32,3 +32,8 @@ Thumbs.db
 # Editor
 .vscode/
 *.swp
+
+# Local tooling
+.claude/
+.prt
+anaconda_projects/
