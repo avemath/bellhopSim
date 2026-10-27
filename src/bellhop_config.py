@@ -8,7 +8,8 @@ When Python runs under WSL (Linux), subprocess calls to bellhop.exe must:
   1. Have the Windows bin directory on PATH
   2. Pass Windows-format paths (C:\\...) not Linux paths (/mnt/c/...) because
      Windows executables cannot resolve /mnt/c/ paths.
-  3. Use a temp directory accessible from Windows (under /mnt/c/).
+  3. Use a temp directory accessible from Windows (under /mnt/c/). The Windows
+     user's %TEMP% folder is found at runtime, through cmd.exe and wslpath.
 
 This module handles all three automatically. Import it FIRST in any notebook
 before importing arlpy.uwapm.
@@ -25,7 +26,39 @@ import subprocess
 import tempfile
 
 BELLHOP_BIN = '/mnt/c/acoustics-toolbox/atWin10_2020_11_4/windows-bin-20201102'
-WIN_TMPDIR = '/mnt/c/Users/avery/AppData/Local/Temp'
+# Found at runtime by find_windows_temp() unless set here or passed to configure().
+WIN_TMPDIR = None
+
+
+def find_windows_temp():
+    """Return the Windows user's %TEMP% folder as a WSL path.
+
+    Asks cmd.exe for %TEMP% and converts the answer with wslpath -u, so it
+    works for any Windows user name.
+
+    Raises
+    ------
+    RuntimeError
+        If cmd.exe or wslpath can't be run, or the folder doesn't exist.
+    """
+    hint = ("Pass the folder yourself, for example "
+            "bc.configure(win_tmpdir='/mnt/c/Users/<you>/AppData/Local/Temp').")
+    try:
+        # Run from a Windows drive so cmd.exe doesn't warn about a UNC working directory.
+        win = subprocess.run(['cmd.exe', '/c', 'echo %TEMP%'], capture_output=True,
+                             text=True, timeout=10, cwd='/mnt/c').stdout.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f'Could not run cmd.exe to find the Windows temp folder ({e}). {hint}') from e
+    if not win or '%TEMP%' in win:
+        raise RuntimeError(f'cmd.exe did not report a %TEMP% folder (got {win!r}). {hint}')
+    try:
+        linux = subprocess.run(['wslpath', '-u', win], capture_output=True,
+                               text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.SubprocessError) as e:
+        raise RuntimeError(f'Could not run wslpath to convert {win!r} ({e}). {hint}') from e
+    if not linux or not os.path.isdir(linux):
+        raise RuntimeError(f'The Windows temp folder {win!r} is not reachable from WSL (got {linux!r}). {hint}')
+    return linux
 
 
 def _to_win_path(linux_path):
@@ -79,7 +112,7 @@ def configure(bellhop_bin=None, win_tmpdir=None, verbose=True):
         standard location on this machine.
     win_tmpdir : str, optional
         Windows-accessible temp directory for BELLHOP working files.
-        Defaults to the user AppData Local Temp folder.
+        Defaults to the Windows user's %TEMP% folder, found by find_windows_temp().
     verbose : bool
         Print configuration status, default True
 
@@ -94,6 +127,8 @@ def configure(bellhop_bin=None, win_tmpdir=None, verbose=True):
         BELLHOP_BIN = bellhop_bin
     if win_tmpdir:
         WIN_TMPDIR = win_tmpdir
+    if WIN_TMPDIR is None:
+        WIN_TMPDIR = find_windows_temp()
 
     # 1. Add bellhop.exe directory to PATH
     current_path = os.environ.get('PATH', '')

@@ -457,16 +457,27 @@ def export_results(env, results, filename=None, outputs_dir=None):
 def wsl_safe_tmpdir():
     """Return a temporary directory path that Windows bellhop.exe can access.
 
+    Tries a bellhopSim folder inside the Windows user's %TEMP% first, then
+    two shared Windows temp folders.
+
     Returns
     -------
     str
         Path to a Windows-accessible temp directory under /mnt/c/
+
+    Raises
+    ------
+    RuntimeError
+        If none of the folders can be created and written to.
     """
-    candidates = [
-        '/mnt/c/Users/avery/AppData/Local/Temp/bellhopSim',
-        '/mnt/c/Windows/Temp/bellhopSim',
-        '/mnt/c/Temp/bellhopSim',
-    ]
+    from .bellhop_config import find_windows_temp
+
+    candidates = []
+    try:
+        candidates.append(os.path.join(find_windows_temp(), 'bellhopSim'))
+    except RuntimeError:
+        pass
+    candidates += ['/mnt/c/Windows/Temp/bellhopSim', '/mnt/c/Temp/bellhopSim']
     for c in candidates:
         try:
             os.makedirs(c, exist_ok=True)
@@ -479,6 +490,6 @@ def wsl_safe_tmpdir():
         except (OSError, PermissionError):
             continue
 
-    # Fallback: use Linux /tmp and hope WSL interop handles it
-    import tempfile
-    return tempfile.gettempdir()
+    raise RuntimeError(
+        'No Windows-accessible temp folder found. Tried: ' + ', '.join(candidates)
+        + '. bellhop.exe cannot read Linux paths such as /tmp.')

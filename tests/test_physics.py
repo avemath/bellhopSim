@@ -127,3 +127,26 @@ def test_single_receiver_is_passed_as_scalar():
 def test_single_receiver_arrivals_run(bellhop):
     arr = eb.run_arrivals(_munk_env(np.array([65.0]), rx_depths_m=np.array([1300.0]), nbeams=50))
     assert arr is not None and len(arr) > 0
+
+
+# ── Windows temp folder: found at runtime, not hardcoded ─────────────────────
+
+def test_windows_temp_is_found_at_runtime():
+    import shutil
+    import src.bellhop_config as bc
+    if not shutil.which('cmd.exe'):
+        pytest.skip('cmd.exe not available (not running under WSL)')
+    path = bc.find_windows_temp()
+    assert path.startswith('/mnt/') and os.path.isdir(path), path
+
+
+def test_windows_temp_error_is_clear(monkeypatch):
+    import subprocess
+    import src.bellhop_config as bc
+
+    def no_cmd(*args, **kwargs):
+        raise FileNotFoundError('cmd.exe')
+
+    monkeypatch.setattr(subprocess, 'run', no_cmd)
+    with pytest.raises(RuntimeError, match='win_tmpdir='):
+        bc.find_windows_temp()
