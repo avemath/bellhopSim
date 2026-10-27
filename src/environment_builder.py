@@ -12,12 +12,13 @@ from datetime import datetime
 # Path to the envfiles directory relative to this file's parent
 _ENVFILES_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'envfiles')
 
-# Bottom type lookup: name -> (sound_speed m/s, density g/cm3, attenuation dB/lambda)
+# Bottom type lookup: name -> (sound_speed m/s, density kg/m3, attenuation dB/lambda).
+# arlpy expects density in kg/m3 (it divides by 1000 when writing the .env file).
 BOTTOM_TYPES = {
-    'mud':    {'soundspeed': 1450.0, 'density': 1.2, 'attenuation': 0.5},
-    'sand':   {'soundspeed': 1650.0, 'density': 1.9, 'attenuation': 0.8},
-    'gravel': {'soundspeed': 1800.0, 'density': 2.0, 'attenuation': 0.6},
-    'rock':   {'soundspeed': 3000.0, 'density': 2.5, 'attenuation': 0.1},
+    'mud':    {'soundspeed': 1450.0, 'density': 1200.0, 'attenuation': 0.5},
+    'sand':   {'soundspeed': 1650.0, 'density': 1900.0, 'attenuation': 0.8},
+    'gravel': {'soundspeed': 1800.0, 'density': 2000.0, 'attenuation': 0.6},
+    'rock':   {'soundspeed': 3000.0, 'density': 2500.0, 'attenuation': 0.1},
 }
 
 
@@ -281,7 +282,7 @@ def describe_env(env):
         print(f"  Rx ranges:       {rr.min():.2f} to {rr.max():.2f} km ({len(rr)} ranges)")
 
     print(f"  Bottom speed:    {env.get('bottom_soundspeed', 'N/A')} m/s")
-    print(f"  Bottom density:  {env.get('bottom_density', 'N/A')} g/cm³")
+    print(f"  Bottom density:  {env.get('bottom_density', 'N/A')} kg/m³")
     print(f"  Bottom absorb:   {env.get('bottom_absorption', 'N/A')} dB/λ")
 
     ssp = env.get('soundspeed', None)

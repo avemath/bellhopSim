@@ -35,5 +35,5 @@ Thumbs.db
 
 # Local tooling
 .claude/
-.prt
+*.prt
 anaconda_projects/

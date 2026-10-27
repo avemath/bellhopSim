@@ -58,8 +58,8 @@ def make_interactive_notebook():
 
 **Interactive exploration of ray acoustics, transmission loss, and multipath propagation**
 
-This notebook drives [BELLHOP](https://oalib-acoustics.org/) — the industry-standard ray-acoustic
-propagation model — through the Python [arlpy](https://github.com/org-arl/arlpy) library.
+This notebook drives [BELLHOP](https://oalib-acoustics.org/), the industry-standard ray-acoustic
+propagation model, through the Python [arlpy](https://github.com/org-arl/arlpy) library.
 You can explore how sound propagates through different ocean environments in real time
 using interactive sliders and dropdowns.
 
@@ -67,24 +67,24 @@ using interactive sliders and dropdowns.
 
 | Output | Physical meaning |
 |--------|-----------------|
-| **Ray paths** | Trajectories of sound energy through the water column — shows refraction, surface/bottom bounces, shadow zones |
-| **Transmission Loss (TL)** | How much sound level drops with range and depth — critical for sonar range prediction |
-| **Multipath arrivals** | The set of distinct ray paths reaching a receiver — determines channel delay spread for communications |
+| **Ray paths** | Trajectories of sound energy through the water column. Shows refraction, surface/bottom bounces, shadow zones |
+| **Transmission Loss (TL)** | How much sound level drops with range and depth. Critical for sonar range prediction |
+| **Multipath arrivals** | The set of distinct ray paths reaching a receiver. Determines channel delay spread for communications |
 
 ## Sections in this notebook
 
-1. **Setup** — BELLHOP path config and library imports
-2. **Sound Speed Profile Explorer** — Interactive SSP builder with 6 profile types
-3. **Ray Tracing** — Visualize ray paths for any source/environment
-4. **Transmission Loss Map** — Full 2D TL color plot with convergence zone detection
-5. **Multipath Arrivals Analysis** — Delay spread, impulse response, comms implications
-6. **Scenario Comparison** — Compare up to 4 environments side-by-side
-7. **Sonar Equation Calculator** — Translate TL into SNR for a real sonar system
+1. **Setup**: BELLHOP path config and library imports
+2. **Sound Speed Profile Explorer**: Interactive SSP builder with 6 profile types
+3. **Ray Tracing**: Visualize ray paths for any source/environment
+4. **Transmission Loss Map**: Full 2D TL color plot with convergence zone detection
+5. **Multipath Arrivals Analysis**: Delay spread, impulse response, comms implications
+6. **Scenario Comparison**: Compare up to 4 environments side-by-side
+7. **Sonar Equation Calculator**: Translate TL into SNR for a real sonar system
 
 ---
 """))
 
-    cells.append(md_cell("## Section 1 — Setup and Configuration"))
+    cells.append(md_cell("## Section 1: Setup and Configuration"))
 
     cells.append(code_cell("""\
 %matplotlib inline
@@ -139,20 +139,20 @@ ok = bc.quick_test()
 if not ok:
     print("\\n⚠  BELLHOP test failed. Check the path configuration above.")
 else:
-    print("\\n✓  BELLHOP is working correctly — proceed to Section 2.")
+    print("\\n✓  BELLHOP is working correctly. Proceed to Section 2.")
 """))
 
     # ---- SECTION 2: SSP Explorer ----
     cells.append(md_cell("""---
-## Section 2 — Sound Speed Profile Explorer
+## Section 2: Sound Speed Profile Explorer
 
 Select a profile type and adjust its parameters.
 The live plot updates as you move the sliders.
-Click **Lock in SSP** to save this profile for use in Sections 3–6.
+Click **Lock in SSP** to save this profile for use in Sections 3 to 6.
 
 ### Physical context
 The sound speed profile (SSP) controls everything about how sound propagates:
-- **Minimum** speed depth = SOFAR channel axis — sound is trapped here and travels enormous distances
+- **Minimum** speed depth = SOFAR channel axis. Sound is trapped here and travels enormous distances
 - **Negative gradient** above the axis: sound refracts upward → skip zones, shadow zones
 - **Positive gradient** below: sound refracts downward → surface duct or upward refraction
 """))
@@ -315,11 +315,11 @@ display(widgets.VBox([
 
     # ---- SECTION 3: Ray Tracing ----
     cells.append(md_cell("""---
-## Section 3 — Ray Tracing Simulation
+## Section 3: Ray Tracing Simulation
 
 Configure the source/receiver geometry and bottom type, then click **Run Ray Trace**.
 
-> **Default source depth = 1300 m** — this is the Munk profile SOFAR channel axis.
+> **Default source depth = 1300 m**: this is the Munk profile SOFAR channel axis.
 > Placing the source at the SOFAR axis produces the classic convergence zone ray fan:
 > rays launched at all angles oscillate symmetrically around the axis and focus at
 > regular intervals (~65 km for typical deep-ocean profiles).
@@ -327,8 +327,8 @@ Configure the source/receiver geometry and bottom type, then click **Run Ray Tra
 > water column and produce shadow zones below.
 
 ### What to look for
-- **Convergence zones**: tight bundles of rays focusing at ~65 km intervals — very low TL
-- **Shadow zones**: regions where no rays reach — very high TL
+- **Convergence zones**: tight bundles of rays focusing at ~65 km intervals, very low TL
+- **Shadow zones**: regions where no rays reach, very high TL
 - **SOFAR channel**: rays launched at small angles (< 10°) oscillate tightly around the axis
 - **Bottom/surface bounces**: steep-angle rays that interact with boundaries lose energy
 """))
@@ -359,12 +359,12 @@ def _rt_check(_=None):
     msgs = []
     sd, wd = rt_src_depth.value, rt_water_depth.value
     if sd >= wd:
-        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m). Will be clamped to {wd-1:.0f} m.')
     if rt_min_angle.value >= rt_max_angle.value:
-        msgs.append(f'⚠ Min angle ({rt_min_angle.value:.0f}°) ≥ max angle ({rt_max_angle.value:.0f}°) — no rays will be traced.')
+        msgs.append(f'⚠ Min angle ({rt_min_angle.value:.0f}°) ≥ max angle ({rt_max_angle.value:.0f}°). No rays will be traced.')
     cost = rt_n_rays.value * rt_max_range.value
     if cost > 15000:   # ~150 rays × 100 km or equivalent
-        msgs.append(f'⚠ {rt_n_rays.value} rays × {rt_max_range.value:.0f} km — expect a slow run (> 30 s). Reduce rays or range for faster results.')
+        msgs.append(f'⚠ {rt_n_rays.value} rays × {rt_max_range.value:.0f} km. Expect a slow run (> 30 s). Reduce rays or range for faster results.')
     rt_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
 
 for _w in [rt_src_depth, rt_water_depth, rt_min_angle, rt_max_angle, rt_n_rays, rt_max_range]:
@@ -427,7 +427,7 @@ def _run_ray_trace(_=None):
         ax_ray.axhline(water_depth, color='#8B6914', linewidth=2, zorder=3)
         ax_ray.axhline(0, color='#2196F3', linewidth=2, zorder=3)
 
-        # Plot rays — arlpy stores each path in row['ray'] as (N,2):
+        # Plot rays: arlpy stores each path in row['ray'] as (N,2):
         # col 0 = range in km, col 1 = depth in metres
         cmap = plt.cm.RdYlBu
         n_rays = len(rays)
@@ -476,7 +476,7 @@ display(widgets.VBox([
 
     # ---- SECTION 4: Transmission Loss ----
     cells.append(md_cell("""---
-## Section 4 — Transmission Loss Map
+## Section 4: Transmission Loss Map
 
 Computes and displays the full 2D transmission loss field (depth × range).
 
@@ -490,7 +490,7 @@ Higher TL = weaker signal. Convergence zones appear as vertical bands of low TL.
 # ── TL shared state ──────────────────────────────────────────────────────────
 _tl_result = {'tl': None, 'env': None}
 tl_ready = widgets.HTML(
-    '<span style="color:gray">No TL data yet — click <b>▶ Run TL Map</b> above.</span>'
+    '<span style="color:gray">No TL data yet. Click <b>▶ Run TL Map</b> above.</span>'
 )
 
 # ── TL widgets ────────────────────────────────────────────────────────────────
@@ -527,14 +527,14 @@ def _tl_check(_=None):
     sd, wd = tl_src_depth.value, tl_water_depth.value
     rmin, rmax = tl_rx_min_d.value, tl_rx_max_d.value
     if sd >= wd:
-        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m). Will be clamped to {wd-1:.0f} m.')
     if rmin >= rmax:
-        msgs.append(f'⚠ Rx min depth ({rmin:.0f} m) ≥ Rx max depth ({rmax:.0f} m) — no receiver grid possible.')
+        msgs.append(f'⚠ Rx min depth ({rmin:.0f} m) ≥ Rx max depth ({rmax:.0f} m). No receiver grid possible.')
     if rmax > wd:
-        msgs.append(f'⚠ Rx max depth ({rmax:.0f} m) exceeds water depth ({wd:.0f} m) — will be clamped to {wd:.0f} m.')
+        msgs.append(f'⚠ Rx max depth ({rmax:.0f} m) exceeds water depth ({wd:.0f} m). Will be clamped to {wd:.0f} m.')
     sd_tl = tl_slice_depth.value
     if sd_tl < rmin or sd_tl > rmax:
-        msgs.append(f'⚠ Slice depth ({sd_tl:.0f} m) is outside the receiver depth range ({rmin:.0f}–{rmax:.0f} m) — slice will show nearest available depth.')
+        msgs.append(f'⚠ Slice depth ({sd_tl:.0f} m) is outside the receiver depth range ({rmin:.0f} to {rmax:.0f} m). Slice will show nearest available depth.')
     tl_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
 
 for _w in [tl_src_depth, tl_water_depth, tl_rx_min_d, tl_rx_max_d, tl_slice_depth]:
@@ -584,7 +584,7 @@ def _run_tl(_=None):
             clear_output(wait=True)
             print(f'BELLHOP error: {type(exc).__name__}: {exc}')
             traceback.print_exc()
-        tl_ready.value = '<span style="color:red">✗ TL computation failed — see output above.</span>'
+        tl_ready.value = '<span style="color:red">✗ TL computation failed. See output above.</span>'
         return
 
     _tl_result['tl'] = tl
@@ -626,7 +626,7 @@ def _run_tl(_=None):
             show_fig(fig)
 
             tl_ready.value = (
-                f'<span style="color:green;font-weight:bold">✓ TL ready</span> — '
+                f'<span style="color:green;font-weight:bold">✓ TL ready</span>: '
                 f'{tl_run_type.value}, f={tl_freq.value:.0f} Hz, '
                 f'src={src_depth:.0f} m, max {tl_max_range.value:.0f} km. '
                 f'Use <b>Pull TL from Section 4</b> in Section 7.'
@@ -673,21 +673,21 @@ display(widgets.VBox([
 
     # ---- SECTION 5: Arrivals ----
     cells.append(md_cell("""---
-## Section 5 — Multipath Arrivals Analysis
+## Section 5: Multipath Arrivals Analysis
 
 BELLHOP traces every ray path from source to receiver and records:
-- **Arrival time** — when each ray path reaches the receiver
-- **Complex amplitude** — amplitude and phase of each path
+- **Arrival time**: when each ray path reaches the receiver
+- **Complex amplitude**: amplitude and phase of each path
 
 ### Why does this matter for communications?
 In an underwater acoustic channel, every symbol you transmit arrives multiple times via
-different paths. Each copy is delayed and scaled differently — this is **multipath**.
+different paths. Each copy is delayed and scaled differently. This is **multipath**.
 
 The **delay spread** $T_d$ (latest minus earliest arrival) determines:
-- **Coherence bandwidth**: $B_c \\approx 1/T_d$ — signals wider than this suffer ISI
-- **ISI length**: $L_{ISI} = \\lfloor T_d \\cdot f_s \\rfloor$ taps — the equalizer must handle this many
+- **Coherence bandwidth**: $B_c \\approx 1/T_d$. Signals wider than this suffer ISI
+- **ISI length**: $L_{ISI} = \\lfloor T_d \\cdot f_s \\rfloor$ taps. The equalizer must handle this many
 
-For typical ocean channels: $T_d \\approx 10$–$200$ ms → $B_c \\approx 5$–$100$ Hz
+For typical ocean channels: $T_d \\approx 10$ to $200$ ms → $B_c \\approx 5$ to $100$ Hz
 (Compare: OFDM subcarrier spacing must be $\\gg B_c$)
 
 ### Getting interesting multipath
@@ -696,11 +696,11 @@ The number of arrivals depends strongly on geometry:
 
 | Setting | Result |
 |---------|--------|
-| Source + Rx both on SOFAR axis (1300 m), range < 65 km | **1 arrival** — only the direct horizontal path returns to that depth; oscillating rays are mid-cycle |
-| Source on SOFAR axis, range ≈ **65 km** (1st convergence zone) | **Many arrivals** — all oscillating rays refocus at the CZ |
-| Source on SOFAR axis, Rx at shallow depth (e.g. 100 m) | **Several arrivals** — catches the upward-swinging rays mid-cycle |
+| Source + Rx both on SOFAR axis (1300 m), range < 65 km | **1 arrival**: only the direct horizontal path returns to that depth; oscillating rays are mid-cycle |
+| Source on SOFAR axis, range ≈ **65 km** (1st convergence zone) | **Many arrivals**: all oscillating rays refocus at the CZ |
+| Source on SOFAR axis, Rx at shallow depth (e.g. 100 m) | **Several arrivals**: catches the upward-swinging rays mid-cycle |
 
-> **Default is 65 km** — the first convergence zone of the Munk profile where multipath is richest.
+> **Default is 65 km**: the first convergence zone of the Munk profile where multipath is richest.
 """))
 
     cells.append(code_cell("""\
@@ -730,13 +730,13 @@ def _arr_check(_=None):
     sd, wd = arr_src_depth.value, arr_water_depth.value
     rd, rng = arr_rx_depth.value, arr_rx_range.value
     if sd >= wd:
-        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+        msgs.append(f'⚠ Source depth ({sd:.0f} m) ≥ water depth ({wd:.0f} m). Will be clamped to {wd-1:.0f} m.')
     if rd >= wd:
-        msgs.append(f'⚠ Rx depth ({rd:.0f} m) ≥ water depth ({wd:.0f} m) — will be clamped to {wd-1:.0f} m.')
+        msgs.append(f'⚠ Rx depth ({rd:.0f} m) ≥ water depth ({wd:.0f} m). Will be clamped to {wd-1:.0f} m.')
     if abs(rd - sd) > 500 and rng < 20:
-        msgs.append(f'⚠ Source ({sd:.0f} m) and Rx ({rd:.0f} m) are far apart in depth at only {rng:.0f} km range — few or no arrivals likely. Try range > 20 km or match source/Rx depths.')
+        msgs.append(f'⚠ Source ({sd:.0f} m) and Rx ({rd:.0f} m) are far apart in depth at only {rng:.0f} km range. Few or no arrivals likely. Try range > 20 km or match source/Rx depths.')
     if abs(rd - sd) < 200 and rng < 60:
-        msgs.append(f'ℹ Source and Rx near same depth ({sd:.0f} m) at {rng:.0f} km — SOFAR cycle ≈ 65 km, so most oscillating rays miss this receiver. Try range ≈ 65 km for the first convergence zone (many arrivals).')
+        msgs.append(f'ℹ Source and Rx near same depth ({sd:.0f} m) at {rng:.0f} km. SOFAR cycle ≈ 65 km, so most oscillating rays miss this receiver. Try range ≈ 65 km for the first convergence zone (many arrivals).')
     arr_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
 
 for _w in [arr_src_depth, arr_water_depth, arr_rx_depth, arr_rx_range]:
@@ -762,7 +762,7 @@ def _run_arrivals(_=None):
 
     with arr_out:
         clear_output(wait=True)
-        print(f'Running BELLHOP arrivals — src={src_depth:.0f} m  rx={rx_depth:.0f} m @ {arr_rx_range.value:.1f} km ...')
+        print(f'Running BELLHOP arrivals: src={src_depth:.0f} m  rx={rx_depth:.0f} m @ {arr_rx_range.value:.1f} km ...')
 
     try:
         arr = pm.compute_arrivals(env)
@@ -906,9 +906,9 @@ def _run_arrivals(_=None):
                     _v = np.isfinite(_t) & np.isfinite(_a) & (_a > 0)
                     print(f'Valid   : {int(_v.sum())}/{len(arr)}')
                     if _v.sum() > 0:
-                        print(f'Time    : {_t[_v].min():.4f}–{_t[_v].max():.4f} s '
+                        print(f'Time    : {_t[_v].min():.4f} to {_t[_v].max():.4f} s '
                               f'(spread={1000*(_t[_v].max()-_t[_v].min()):.2f} ms)')
-                        print(f'Amp     : {_a[_v].min():.3e}–{_a[_v].max():.3e}')
+                        print(f'Amp     : {_a[_v].min():.3e} to {_a[_v].max():.3e}')
             traceback.print_exc()
 
 arr_run_btn.on_click(_run_arrivals)
@@ -927,7 +927,7 @@ display(widgets.VBox([
 
     # ---- SECTION 6: Scenario Comparison ----
     cells.append(md_cell("""---
-## Section 6 — Scenario Comparison
+## Section 6: Scenario Comparison
 
 Save up to 4 named scenarios (each with its own SSP, depth, frequency, bottom) then
 compare their TL-vs-range curves and summary statistics side-by-side.
@@ -969,7 +969,7 @@ sc_out        = widgets.Output()
 def _sc_check(_=None):
     msgs = []
     if sc_src_d.value >= sc_water_d.value:
-        msgs.append(f'⚠ Source depth ({sc_src_d.value:.0f} m) ≥ water depth ({sc_water_d.value:.0f} m) — will be clamped on save.')
+        msgs.append(f'⚠ Source depth ({sc_src_d.value:.0f} m) ≥ water depth ({sc_water_d.value:.0f} m). Will be clamped on save.')
     sc_warn.value = '<br>'.join(f'<span style="{_WARN_STYLE}">{m}</span>' for m in msgs)
 
 for _w in [sc_src_d, sc_water_d]:
@@ -1107,7 +1107,7 @@ display(widgets.VBox([
 
     # ---- SECTION 7: Sonar Equation ----
     cells.append(md_cell("""---
-## Section 7 — Sonar Equation Calculator
+## Section 7: Sonar Equation Calculator
 
 The passive sonar equation:
 
@@ -1126,10 +1126,10 @@ A target is **detectable** when $SNR \\geq DT$.
 
     cells.append(code_cell("""\
 # ── Sonar equation widgets ────────────────────────────────────────────────────
-sn_sl  = _slider('SL — Source Level (dB)',      200, 140, 240, 1)
-sn_nl  = _slider('NL — Noise Level (dB)',        60, 30, 100, 1)
-sn_di  = _slider('DI — Directivity Index (dB)',   0, 0, 40, 1)
-sn_dt  = _slider('DT — Detection Threshold (dB)',  10, 0, 30, 1)
+sn_sl  = _slider('SL: Source Level (dB)',      200, 140, 240, 1)
+sn_nl  = _slider('NL: Noise Level (dB)',        60, 30, 100, 1)
+sn_di  = _slider('DI: Directivity Index (dB)',   0, 0, 40, 1)
+sn_dt  = _slider('DT: Detection Threshold (dB)',  10, 0, 30, 1)
 sn_tl_manual = _slider('TL (dB)', 80, 20, 150, 0.1)
 sn_tl_range  = _slider('Lookup range (km)',  50, 0.5, 500, 0.5)
 sn_tl_depth  = _slider('Lookup depth (m)', 1300, 0, 5000, 10)
@@ -1215,7 +1215,7 @@ display(widgets.VBox([
                  '<span style="color:gray;font-size:0.9em">'
                  'Either drag the slider to enter TL manually, or use the Section 4 lookup below.</span>'),
     sn_tl_manual,
-    widgets.HTML('<b>Section 4 TL lookup</b> — set range &amp; depth, then click the button:'),
+    widgets.HTML('<b>Section 4 TL lookup</b>: set range &amp; depth, then click the button:'),
     widgets.HBox([sn_tl_range, sn_tl_depth]),
     widgets.HBox([sn_tl_from4, sn_pull_status]),
     widgets.HTML('<hr>'),
@@ -1249,10 +1249,10 @@ def make_advanced_notebook():
 Advanced multi-scenario analyses built on top of the main interactive notebook.
 
 ## Contents
-1. **SOFAR Channel Animation** — Source sinking through water column, animated ray plots
-2. **Frequency Sweep** — TL comparison across 5 frequencies
-3. **Range-Dependent Bathymetry** — Sloping continental shelf
-4. **Communication Channel Simulator** — BPSK through acoustic channel + BER vs SNR
+1. **SOFAR Channel Animation**: Source sinking through water column, animated ray plots
+2. **Frequency Sweep**: TL comparison across 5 frequencies
+3. **Range-Dependent Bathymetry**: Sloping continental shelf
+4. **Communication Channel Simulator**: BPSK through acoustic channel + BER vs SNR
 """))
 
     # Setup
@@ -1279,7 +1279,7 @@ import src.utils as ut
 
     # ---- 1. SOFAR Animation ----
     cells.append(md_cell("""---
-## 1 — SOFAR Channel Animation
+## 1. SOFAR Channel Animation
 
 Step the source depth from near-surface to maximum depth.
 For each step, BELLHOP computes ray paths and we assemble them into an animation
@@ -1375,7 +1375,7 @@ HTML(anim.to_jshtml())
 
     # ---- 2. Frequency Sweep ----
     cells.append(md_cell("""---
-## 2 — Frequency Sweep
+## 2. Frequency Sweep
 
 Higher frequencies: shorter wavelengths, sharper interference patterns, higher absorption.
 Lower frequencies: longer range, smoother TL, but less directional.
@@ -1424,7 +1424,7 @@ fig, axes = plt.subplots(len(sweep_freqs), 1, figsize=(14, 4*len(sweep_freqs)),
 for i, freq in enumerate(sweep_freqs):
     tl = tl_results[freq]
     if tl is None:
-        axes[i].set_title(f'{freq} Hz — no data')
+        axes[i].set_title(f'{freq} Hz: no data')
         continue
     depths = np.asarray(tl.index, dtype=float)
     ranges_km = np.asarray(tl.columns, dtype=float)
@@ -1444,7 +1444,7 @@ for i, freq in enumerate(sweep_freqs):
     plt.colorbar(im, ax=axes[i], label='TL (dB)', fraction=0.025)
 
 axes[-1].set_xlabel('Range (km)', fontsize=11)
-plt.suptitle('Frequency Sweep — Transmission Loss vs Frequency\\nMunk Profile, 5000 m depth',
+plt.suptitle('Frequency Sweep: Transmission Loss vs Frequency\\nMunk Profile, 5000 m depth',
              fontsize=13, fontweight='bold', y=1.002)
 plt.tight_layout()
 display(fig)
@@ -1471,7 +1471,7 @@ for i, freq in enumerate(sweep_freqs):
 ax.invert_yaxis()
 ax.set_xlabel('Range (km)', fontsize=11)
 ax.set_ylabel('Transmission Loss (dB)', fontsize=11)
-ax.set_title(f'TL at Source Depth ({sweep_src:.0f} m) vs Range — Frequency Comparison', fontsize=12)
+ax.set_title(f'TL at Source Depth ({sweep_src:.0f} m) vs Range: Frequency Comparison', fontsize=12)
 ax.grid(True, alpha=0.25)
 ax.legend(title='Frequency', fontsize=10)
 plt.tight_layout()
@@ -1481,10 +1481,10 @@ plt.close(fig)
 
     # ---- 3. Range-Dependent Bathymetry ----
     cells.append(md_cell("""---
-## 3 — Range-Dependent Bathymetry
+## 3. Range-Dependent Bathymetry
 
 Model a continental shelf: the bottom slopes from shallow (200 m) to deep (3000 m)
-over 80 km — a typical continental slope geometry. arlpy accepts a range-dependent
+over 80 km, a typical continental slope geometry. arlpy accepts a range-dependent
 bathymetry as a list of (range_km, depth_m) pairs.
 
 This shows how rays are refracted differently as the water deepens:
@@ -1509,7 +1509,7 @@ env_rd = pm.create_env2d(
     depth=list(zip(bathy_ranges.tolist(), bathy_depths.tolist())),
     soundspeed=ssp_use.tolist(),
     frequency=500.0,
-    tx_depth=50.0,   # shallow source — on the shelf
+    tx_depth=50.0,   # shallow source, on the shelf
     rx_depth=np.linspace(0, max_depth, 51),
     rx_range=np.linspace(0.2, 120.0, 100),
     nbeams=200,
@@ -1556,7 +1556,7 @@ ax_r.set_xlim(0, 120000)
 ax_r.set_ylim(max_depth * 1.08, -max_depth * 0.02)
 ax_r.set_xlabel('Range (m)', fontsize=11)
 ax_r.set_ylabel('Depth (m)', fontsize=11)
-ax_r.set_title('Ray Diagram — Continental Slope Bathymetry | f=500 Hz', fontsize=12)
+ax_r.set_title('Ray Diagram: Continental Slope Bathymetry | f=500 Hz', fontsize=12)
 ax_r.grid(True, alpha=0.2)
 ax_r.legend(fontsize=9)
 
@@ -1575,7 +1575,7 @@ if tl_rd is not None:
     axes[1].set_ylim(max_depth * 1.08, -max_depth * 0.02)
     axes[1].set_xlabel('Range (km)', fontsize=11)
     axes[1].set_ylabel('Depth (m)', fontsize=11)
-    axes[1].set_title('Transmission Loss — Continental Slope', fontsize=12)
+    axes[1].set_title('Transmission Loss: Continental Slope', fontsize=12)
     axes[1].grid(True, alpha=0.15, color='white')
     axes[1].legend(fontsize=9)
     plt.colorbar(im, ax=axes[1], label='TL (dB)', fraction=0.025)
@@ -1587,7 +1587,7 @@ plt.close(fig)
 
     # ---- 4. Comms Simulator ----
     cells.append(md_cell("""---
-## 4 — Communication Channel Simulator
+## 4. Communication Channel Simulator
 
 Use the BELLHOP channel impulse response to simulate an underwater acoustic
 communication link:
@@ -1608,7 +1608,7 @@ comm_water_depth = 1000.0
 comm_src_depth   = 50.0
 comm_rx_range    = 15.0   # km
 comm_rx_depth    = 100.0
-comm_freq        = 3500.0   # Hz — narrowband carrier
+comm_freq        = 3500.0   # Hz, narrowband carrier
 comm_fs          = 10000.0  # sample rate
 
 ssp_sw = prof.shallow_water_profile(total_depth=comm_water_depth)
@@ -1634,7 +1634,7 @@ if arr_c is not None:
     print(f'Coherence BW: {stats["coherence_bandwidth_hz"]:.1f} Hz')
     print(f'IR length: {len(ir)} samples at {comm_fs:.0f} Hz')
 else:
-    print('No arrivals — using simple 3-path synthetic channel')
+    print('No arrivals: using simple 3-path synthetic channel')
     ir = np.array([1.0, 0, 0, 0, 0.4, 0, 0, 0.2], dtype=complex)
     stats = {'n_arrivals': 3, 'delay_spread_ms': 0.7,
              'coherence_bandwidth_hz': 1429.0}
@@ -1683,7 +1683,7 @@ for snr in snr_range:
 from scipy.special import erfc
 ber_awgn = 0.5 * erfc(np.sqrt(10**(snr_range/10)))
 
-print(f'BER simulation complete over SNR range {snr_range[0]}–{snr_range[-1]} dB')
+print(f'BER simulation complete over SNR range {snr_range[0]} to {snr_range[-1]} dB')
 """))
 
     cells.append(code_cell("""\
@@ -1725,7 +1725,7 @@ ax_ber.semilogy(snr_range, np.maximum(bers, 1e-5), 'o-', color='#e67e22',
 ax_ber.semilogy(snr_range, ber_awgn, 'k--', linewidth=1.5, label='Ideal AWGN BPSK')
 ax_ber.set_xlabel('SNR (dB)', fontsize=11)
 ax_ber.set_ylabel('Bit Error Rate', fontsize=11)
-ax_ber.set_title('BER vs SNR — Multipath vs AWGN', fontsize=12)
+ax_ber.set_title('BER vs SNR: Multipath vs AWGN', fontsize=12)
 ax_ber.grid(True, alpha=0.25, which='both')
 ax_ber.legend(fontsize=10)
 ax_ber.set_ylim(1e-4, 1)

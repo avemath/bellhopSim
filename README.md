@@ -13,16 +13,16 @@ used in sonar design, ocean tomography, and acoustic communications research.
 
 This notebook suite lets you:
 
-- **Build any sound speed profile** (SSP) — Munk deep ocean, shallow water shelf,
+- **Build any sound speed profile** (SSP): Munk deep ocean, shallow water shelf,
   Arctic, surface duct, or custom from (depth, speed) pairs
-- **Trace rays** from any source depth through any ocean environment — visualize
+- **Trace rays** from any source depth through any ocean environment. Visualize
   refraction, shadow zones, and convergence zones in real time
 - **Compute 2D transmission loss** maps showing how sound level drops with range
   and depth, with automatic convergence zone detection
-- **Analyze multipath arrivals** — see how many ray paths reach a receiver, their
+- **Analyze multipath arrivals**: see how many ray paths reach a receiver, their
   delay spread, and implications for underwater acoustic communications
-- **Run the sonar equation** — convert TL into SNR for a real sensor system
-- **Simulate an acoustic comms link** — convolve BPSK symbols through the BELLHOP
+- **Run the sonar equation**: convert TL into SNR for a real sensor system
+- **Simulate an acoustic comms link**: convolve BPSK symbols through the BELLHOP
   channel and compute BER vs SNR
 
 ---
@@ -42,11 +42,11 @@ Download from: https://oalib-acoustics.org/models-and-software/acoustics-toolbox
 
 Install via [Anaconda](https://www.anaconda.com/) or python.org.
 
-### 3. WSL (Windows Subsystem for Linux) — if running from WSL
+### 3. WSL (Windows Subsystem for Linux), if running from WSL
 
 If you run JupyterLab from WSL, `src/bellhop_config.py` automatically handles the
 WSL-to-Windows path conversion so `bellhop.exe` can find its working files.
-No manual configuration needed — just call `bc.configure()` at the top of any notebook.
+No manual configuration needed: just call `bc.configure()` at the top of any notebook.
 
 ---
 
@@ -101,19 +101,19 @@ run before any `arlpy.uwapm` simulation calls. Run cells in order.
 
 ## Notebook Descriptions
 
-### `notebooks/bellhop_interactive.ipynb` — Main Simulation Interface
+### `notebooks/bellhop_interactive.ipynb`: Main Simulation Interface
 
 | Section | What it does |
 |---------|-------------|
 | **1. Setup** | Configures BELLHOP path, imports modules, shows default arlpy environment |
 | **2. SSP Explorer** | Build any of 6 ocean sound speed profiles with live interactive plot; lock in SSP for later sections |
-| **3. Ray Tracing** | Launch angle range, source depth, frequency, bottom type — see all ray paths as a diagram |
+| **3. Ray Tracing** | Launch angle range, source depth, frequency, bottom type. See all ray paths as a diagram |
 | **4. Transmission Loss** | Full 2D TL color map (depth × range), coherent/incoherent/semi-coherent, automatic convergence zone detection, horizontal TL slice at any depth |
 | **5. Multipath Arrivals** | Arrivals stem plot, delay spread, coherence bandwidth, channel impulse response at any sample rate |
 | **6. Scenario Comparison** | Save up to 4 scenarios, overlay TL curves and SSPs for direct comparison |
 | **7. Sonar Equation** | SL/NL/DI/DT sliders, pull TL from Section 4, compute SNR and detection verdict |
 
-### `notebooks/bellhop_advanced.ipynb` — Advanced Scenarios
+### `notebooks/bellhop_advanced.ipynb`: Advanced Scenarios
 
 | Section | What it does |
 |---------|-------------|
@@ -121,6 +121,39 @@ run before any `arlpy.uwapm` simulation calls. Run cells in order.
 | **2. Frequency Sweep** | Runs BELLHOP at 100, 500, 1000, 2500, 5000 Hz; subplot grid of TL maps and comparison line plot |
 | **3. Range-Dependent Bathymetry** | Continental shelf sloping from 200 m to 3500 m; shows range-dependent ray refraction and TL effects |
 | **4. Comms Simulator** | BPSK symbols convolved with BELLHOP channel IR, AWGN added, detected; BER vs SNR vs theoretical AWGN curve |
+
+---
+
+## Figures
+
+Generated headlessly from the same `src/` modules the notebooks use. Every parameter and
+computed number behind them is recorded in [`docs/figures/figures.json`](docs/figures/figures.json).
+
+To regenerate (BELLHOP must be configured as described above):
+
+```bash
+python scripts/export_figures.py
+```
+
+**Munk deep-water sound speed profile and ray trace** (source on the channel axis at 1300 m, 500 Hz)
+
+![Munk sound speed profile and ray trace](docs/figures/ssp_and_rays.png)
+
+**Transmission loss** for the same environment (incoherent, 0.5 to 100 km)
+
+![Transmission loss map](docs/figures/tl_map.png)
+
+**Multipath arrivals** at 65 km range, 1300 m depth, with the delay spread marked
+
+![Multipath arrivals](docs/figures/arrivals.png)
+
+**BPSK bit error rate** through the BELLHOP channel (1000 m water, 15 km range, 3500 Hz) against the theoretical AWGN curve
+
+![BER vs SNR](docs/figures/ber_vs_snr.png)
+
+**Frequency sweep**: TL vs range at 100 m depth for 100 Hz to 5 kHz
+
+![Frequency sweep](docs/figures/frequency_sweep.png)
 
 ---
 
@@ -133,6 +166,9 @@ bellhopSim/
 │   └── bellhop_advanced.ipynb      ← advanced multi-scenario notebook
 ├── envfiles/                       ← BELLHOP .env files (auto-generated, gitignored)
 ├── outputs/                        ← exported plots and JSON results (gitignored)
+├── docs/figures/                   ← case-study figures + figures.json (committed)
+├── scripts/
+│   └── export_figures.py           ← regenerates docs/figures/ headlessly
 ├── src/
 │   ├── bellhop_config.py           ← WSL path fix + arlpy patch (import FIRST)
 │   ├── profiles.py                 ← SSP library (Munk, shallow water, Arctic, ...)
@@ -171,20 +207,21 @@ Boundary reflections, absorption, and refraction all modify this.
 
 ### SOFAR Channel
 
-In the deep ocean, sound speed has a minimum at roughly 1000–1300 m depth — the
-**SOFAR** (Sound Fixing And Ranging) channel axis. Rays launched near this depth
-oscillate around it via total refraction and travel thousands of km with very low TL.
-This is why WWII-era military sonars could detect explosions across ocean basins.
+In much of the deep ocean, sound speed reaches a minimum at around 1000 m depth
+(1300 m in the canonical Munk profile used here). This is the **SOFAR** (Sound Fixing
+And Ranging) channel axis. Rays launched near this depth are refracted back toward it
+from above and below, so they stay in the channel without touching the lossy surface
+or bottom and can travel very long distances.
 
 ### Multipath and Acoustic Communications
 
 Every ray path from source to receiver arrives at a different time. A transmitted
-symbol arrives as many echoes, each delayed and scaled — **multipath propagation**.
+symbol arrives as many echoes, each delayed and scaled. This is **multipath propagation**.
 
 The **delay spread** $T_d$ limits usable bandwidth:
-- Coherence bandwidth $B_c \approx 1/T_d$ — signals wider than this suffer ISI
-- For shallow water (100–500 m, short range): $T_d \approx 5$–$30$ ms
-- For deep ocean (long range): $T_d \approx 50$–$500$ ms
+- Coherence bandwidth $B_c \approx 1/T_d$: signals wider than this suffer ISI
+- For shallow water (100 to 500 m, short range): $T_d \approx 5$ to $30$ ms
+- For deep ocean (long range): $T_d \approx 50$ to $500$ ms
 
 OFDM is the standard solution: use many narrowband subcarriers, each $\ll B_c$,
 with a cyclic prefix longer than $T_d$.
@@ -193,9 +230,9 @@ with a cyclic prefix longer than $T_d$.
 
 ## References
 
-- **Jensen et al.** — *Computational Ocean Acoustics* (2nd ed., Springer, 2011)
+- **Jensen et al.**, *Computational Ocean Acoustics* (2nd ed., Springer, 2011)
   The standard graduate-level reference for all ocean acoustic modeling
-- **Porter, M.B.** — *The BELLHOP Manual* (Heat, Light and Sound Research, 2011)
+- **Porter, M.B.**, *The BELLHOP Manual* (Heat, Light and Sound Research, 2011)
   Available at https://oalib-acoustics.org
-- **arlpy documentation** — https://arlpy.readthedocs.io
-- **OALIB** — https://oalib-acoustics.org — open-source acoustics software library
+- **arlpy documentation**: https://arlpy.readthedocs.io
+- **OALIB**: https://oalib-acoustics.org, open-source acoustics software library

@@ -140,7 +140,7 @@ def plot_rays(ray_data, env, ax=None, title=None, max_rays=None, alpha=0.6):
         else:
             indices = list(range(n_rays))
 
-        cmap = cm.get_cmap('RdYlBu')
+        cmap = plt.get_cmap('RdYlBu')
         for i in indices:
             row = ray_data.iloc[i]
             if 'ray' in row.index:

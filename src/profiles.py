@@ -43,7 +43,7 @@ def munk_profile(c0=1500.0, z_axis=1300.0, B=1300.0, epsilon=0.00737, z_max=5000
 
 
 def isothermal_profile(speed=1500.0, z_max=5000.0, n_points=10):
-    """Constant sound speed with depth — the simplest possible SSP.
+    """Constant sound speed with depth: the simplest possible SSP.
 
     Parameters
     ----------

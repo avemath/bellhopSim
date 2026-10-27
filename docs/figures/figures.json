@@ -1,0 +1,239 @@
+{
+  "generated_utc": "2026-10-27T20:38:59+00:00",
+  "generator": "scripts/export_figures.py",
+  "figures": [
+    "ssp_and_rays.png",
+    "tl_map.png",
+    "arrivals.png",
+    "ber_vs_snr.png",
+    "frequency_sweep.png"
+  ],
+  "dpi": 150,
+  "deep_water": {
+    "parameters": {
+      "ssp": "Munk (c0=1500 m/s, axis 1300 m, B=1300 m, epsilon=0.00737)",
+      "water_depth_m": 5000.0,
+      "source_depth_m": 1300.0,
+      "frequency_hz": 500.0,
+      "bottom_type": "sand",
+      "rays": {
+        "max_range_km": 100.0,
+        "n_rays": 50,
+        "min_angle_deg": -20.0,
+        "max_angle_deg": 20.0
+      },
+      "tl": {
+        "mode": "incoherent",
+        "min_range_km": 0.5,
+        "max_range_km": 100.0,
+        "n_ranges": 100,
+        "rx_min_depth_m": 0.0,
+        "rx_max_depth_m": 4950.0,
+        "n_rx_depths": 51,
+        "n_beams": 200,
+        "dynamic_range_db": 60.0,
+        "cz_threshold_db": 4.0
+      },
+      "arrivals": {
+        "rx_range_km": 65.0,
+        "rx_depth_m": 1300.0,
+        "n_beams": 200
+      }
+    },
+    "sofar_axis_depth_m": 1306.532663316583,
+    "sound_speed_range_m_s": [
+      1500.0005564535084,
+      1551.9107368195284
+    ],
+    "rays_traced": 50,
+    "tl_at_source_depth_db": {
+      "depth_m": 1287.0,
+      "10_km": 76.34605862250251,
+      "30_km": 79.26328216948016,
+      "65_km": 85.73292517491127,
+      "100_km": 86.00749703346028
+    },
+    "convergence_zones_detected_km": [],
+    "convergence_zone_detection_depth_m": 2475.0,
+    "arrivals": {
+      "n_arrivals": 35,
+      "delay_spread_ms": 11875.74,
+      "delay_spread_definition": "latest minus earliest eigenray, all eigenrays (src/utils.py)",
+      "coherence_bandwidth_hz": 0.0842052789973509,
+      "coherence_bandwidth_definition": "1 / delay spread",
+      "n_arrivals_within_20db": 7,
+      "delay_spread_within_20db_ms": 2128.276800000002,
+      "coherence_bandwidth_within_20db_hz": 0.4698636944217026,
+      "strongest_to_second_amplitude_ratio": 3.0593933504313355
+    }
+  },
+  "comms": {
+    "parameters": {
+      "ssp": "shallow_water_profile(total_depth=1000 m)",
+      "water_depth_m": 1000.0,
+      "source_depth_m": 50.0,
+      "rx_range_km": 15.0,
+      "rx_depth_m": 100.0,
+      "frequency_hz": 3500.0,
+      "bottom_type": "sand",
+      "n_beams": 1000,
+      "sample_rate_hz": 10000.0,
+      "samples_per_symbol": 4,
+      "n_symbols_per_trial": 20000,
+      "n_trials_per_snr": 5,
+      "random_seed": 42,
+      "snr_db": [
+        -2,
+        0,
+        2,
+        4,
+        6,
+        8,
+        10,
+        12,
+        14,
+        16,
+        18,
+        20
+      ]
+    },
+    "link_model": "complex baseband NRZ BPSK through the complex BELLHOP impulse response; receiver synchronized to the strongest arrival (delay and phase); one sample per symbol; sign detector; no equalizer",
+    "snr_definition": "received signal power (after channel) / complex noise power, per sample",
+    "theory_curve": "0.5*erfc(sqrt(SNR)), BPSK in AWGN with this SNR definition",
+    "bits_per_snr_point": 100000,
+    "channel": {
+      "n_arrivals": 43,
+      "delay_spread_ms": 2797.304199999999,
+      "coherence_bandwidth_hz": 0.3574870405585493,
+      "n_arrivals_within_20db": 18,
+      "delay_spread_within_20db_ms": 730.141699999999,
+      "impulse_response_length_samples": 56447,
+      "symbol_rate_baud": 2500.0,
+      "isi_span_symbols": 6993
+    },
+    "ber": [
+      {
+        "snr_db": -2.0,
+        "ber_bellhop_channel": 0.37247,
+        "ber_awgn_simulated": 0.13054,
+        "ber_awgn_theory": 0.13064448852282917
+      },
+      {
+        "snr_db": 0.0,
+        "ber_bellhop_channel": 0.35372,
+        "ber_awgn_simulated": 0.07673,
+        "ber_awgn_theory": 0.07864960352514258
+      },
+      {
+        "snr_db": 2.0,
+        "ber_bellhop_channel": 0.34103,
+        "ber_awgn_simulated": 0.0378,
+        "ber_awgn_theory": 0.03750612835892598
+      },
+      {
+        "snr_db": 4.0,
+        "ber_bellhop_channel": 0.33118,
+        "ber_awgn_simulated": 0.01228,
+        "ber_awgn_theory": 0.01250081804073755
+      },
+      {
+        "snr_db": 6.0,
+        "ber_bellhop_channel": 0.32273,
+        "ber_awgn_simulated": 0.00253,
+        "ber_awgn_theory": 0.002388290780932807
+      },
+      {
+        "snr_db": 8.0,
+        "ber_bellhop_channel": 0.31574,
+        "ber_awgn_simulated": 0.00015,
+        "ber_awgn_theory": 0.00019090777407599314
+      },
+      {
+        "snr_db": 10.0,
+        "ber_bellhop_channel": 0.3112,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 3.872108215522035e-06
+      },
+      {
+        "snr_db": 12.0,
+        "ber_bellhop_channel": 0.30843,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 9.006010350628754e-09
+      },
+      {
+        "snr_db": 14.0,
+        "ber_bellhop_channel": 0.30762,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 6.810189128780772e-13
+      },
+      {
+        "snr_db": 16.0,
+        "ber_bellhop_channel": 0.30473,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 2.267395844454418e-19
+      },
+      {
+        "snr_db": 18.0,
+        "ber_bellhop_channel": 0.30246,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 1.3960143109067526e-29
+      },
+      {
+        "snr_db": 20.0,
+        "ber_bellhop_channel": 0.30358,
+        "ber_awgn_simulated": 0.0,
+        "ber_awgn_theory": 1.0442437918812723e-45
+      }
+    ]
+  },
+  "frequency_sweep": {
+    "parameters": {
+      "ssp": "Munk (defaults)",
+      "water_depth_m": 5000.0,
+      "source_depth_m": 100.0,
+      "frequencies_hz": [
+        100,
+        500,
+        1000,
+        2500,
+        5000
+      ],
+      "bottom_type": "sand",
+      "mode": "incoherent",
+      "min_range_km": 0.5,
+      "max_range_km": 100.0,
+      "n_ranges": 80,
+      "n_rx_depths": 51,
+      "n_beams": 200,
+      "tl_slice_depth_m": 100.0
+    },
+    "rx_depth_used_m": 100.0,
+    "tl_by_frequency": {
+      "100_hz": {
+        "tl_db_at_10_km": 86.66932772855661,
+        "tl_db_at_50_km": 89.14482701164769,
+        "tl_db_at_100_km": 96.8217645991996
+      },
+      "500_hz": {
+        "tl_db_at_10_km": 87.01924325218415,
+        "tl_db_at_50_km": 90.35722587960376,
+        "tl_db_at_100_km": 99.26175651638349
+      },
+      "1000_hz": {
+        "tl_db_at_10_km": 87.63147063284515,
+        "tl_db_at_50_km": 92.48065256385415,
+        "tl_db_at_100_km": 103.53532949112461
+      },
+      "2500_hz": {
+        "tl_db_at_10_km": 89.07641875163633,
+        "tl_db_at_50_km": 97.50179172178659,
+        "tl_db_at_100_km": 113.64134740068462
+      },
+      "5000_hz": {
+        "tl_db_at_10_km": 92.26278386048472,
+        "tl_db_at_50_km": 108.61023817787907,
+        "tl_db_at_100_km": 136.00196311761817
+      }
+    }
+  }
+}
