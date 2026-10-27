@@ -34,6 +34,113 @@ def _apply_bottom(env, bottom_type):
     return env
 
 
+# ── Units boundary ────────────────────────────────────────────────────────────
+# arlpy works in meters for every range (receiver ranges, bathymetry ranges,
+# ray x coordinates, TL columns). This project works in km. All BELLHOP runs go
+# through create_env() and the run_* helpers below so the conversion happens
+# in exactly one place.
+
+M_PER_KM = 1000.0
+
+
+def _as_arlpy_axis(values):
+    """Return a float array, or a plain float for a single value.
+
+    arlpy's .env writer only accepts a scalar or an array of length >= 2;
+    a 1-element array raises TypeError under NumPy 2.
+    """
+    arr = np.atleast_1d(np.asarray(values, dtype=float))
+    return float(arr[0]) if arr.size == 1 else arr
+
+
+def create_env(depth, ssp, frequency, tx_depth, rx_depths_m, rx_ranges_km,
+               bottom_type=None, **kwargs):
+    """Build an arlpy environment with receiver ranges given in km.
+
+    Parameters
+    ----------
+    depth : float or array-like of shape (N, 2)
+        Water depth in meters, or range-dependent bathymetry as
+        (range_km, depth_m) pairs.
+    ssp : numpy.ndarray
+        Sound speed profile of shape (N, 2): depth (m), speed (m/s).
+    frequency : float
+        Frequency in Hz
+    tx_depth : float
+        Source depth in meters
+    rx_depths_m : float or array-like
+        Receiver depths in meters
+    rx_ranges_km : float or array-like
+        Receiver ranges in km (converted to meters for arlpy)
+    bottom_type : str, optional
+        Key into BOTTOM_TYPES; applied if given
+    **kwargs
+        Passed through to arlpy.uwapm.create_env2d (nbeams, min_angle, ...)
+
+    Returns
+    -------
+    dict
+        arlpy environment dictionary (meters, arlpy convention)
+    """
+    import arlpy.uwapm as pm
+
+    if np.ndim(depth) == 2:
+        bathy = np.asarray(depth, dtype=float).copy()
+        bathy[:, 0] *= M_PER_KM
+        depth = bathy.tolist()
+    else:
+        depth = float(depth)
+
+    env = pm.create_env2d(
+        depth=depth,
+        soundspeed=np.asarray(ssp, dtype=float).tolist(),
+        frequency=float(frequency),
+        tx_depth=float(tx_depth),
+        rx_depth=_as_arlpy_axis(rx_depths_m),
+        rx_range=_as_arlpy_axis(np.asarray(rx_ranges_km, dtype=float) * M_PER_KM),
+        **kwargs,
+    )
+    if bottom_type is not None:
+        _apply_bottom(env, bottom_type)
+    return env
+
+
+def run_rays(env):
+    """Run BELLHOP ray tracing; ray x coordinates are returned in km."""
+    import arlpy.uwapm as pm
+    rays = pm.compute_rays(env)
+    if rays is None:
+        return None
+    rays = rays.copy()
+    rays['ray'] = [np.column_stack([np.asarray(r)[:, 0] / M_PER_KM, np.asarray(r)[:, 1]])
+                   for r in rays['ray']]
+    return rays
+
+
+def run_tl(env, mode=None):
+    """Run BELLHOP transmission loss; columns (ranges) are returned in km.
+
+    Values are complex pressure as returned by arlpy; TL_dB = -20*log10(|p|).
+    """
+    import arlpy.uwapm as pm
+    tl = pm.compute_transmission_loss(env, mode=mode or pm.incoherent)
+    if tl is None:
+        return None
+    tl = tl.copy()
+    tl.columns = np.asarray(tl.columns, dtype=float) / M_PER_KM
+    return tl
+
+
+def run_arrivals(env):
+    """Run BELLHOP arrivals. Returns None if BELLHOP finds no eigenrays."""
+    import arlpy.uwapm as pm
+    try:
+        return pm.compute_arrivals(env)
+    except ValueError:
+        # pandas >= 2: pd.concat([]) raises when there are no arrivals
+        return None
+
+
 def build_deep_ocean_env(
     ssp,
     water_depth=5000.0,
@@ -74,27 +181,13 @@ def build_deep_ocean_env(
     dict
         arlpy environment dictionary ready for pm.compute_rays() etc.
     """
-    import arlpy.uwapm as pm
-
     if rx_depths is None:
         rx_depths = np.linspace(0.0, water_depth, 10)
     if rx_ranges is None:
         rx_ranges = np.linspace(1.0, 100.0, 50)
 
-    # Clip SSP to water depth
-    ssp_clipped = _clip_ssp(ssp, water_depth)
-
-    env = pm.create_env2d(
-        depth=water_depth,
-        soundspeed=ssp_clipped.tolist(),
-        frequency=frequency,
-        tx_depth=float(src_depth),
-        rx_depth=np.asarray(rx_depths, dtype=float),
-        rx_range=np.asarray(rx_ranges, dtype=float),
-        nbeams=n_rays,
-    )
-
-    _apply_bottom(env, bottom_type)
+    env = create_env(water_depth, _clip_ssp(ssp, water_depth), frequency, src_depth,
+                     rx_depths, rx_ranges, bottom_type=bottom_type, nbeams=n_rays)
     env['surface_absorption'] = float(surface_loss_db)
 
     return env
@@ -127,7 +220,7 @@ def build_shallow_water_env(
     rx_depths : array-like, optional
         Receiver depths; defaults to 10 depths from 1 to water_depth-1 m
     rx_ranges : array-like, optional
-        Receiver ranges in km; defaults to 30 ranges from 0.1 to 20 km
+        Receiver ranges in km; defaults to 50 ranges from 0.1 to 20 km
     frequency : float
         Acoustic frequency in Hz, default 1000
     bottom_type : str
@@ -142,26 +235,13 @@ def build_shallow_water_env(
     dict
         arlpy environment dictionary
     """
-    import arlpy.uwapm as pm
-
     if rx_depths is None:
         rx_depths = np.linspace(1.0, water_depth - 1.0, 10)
     if rx_ranges is None:
         rx_ranges = np.linspace(0.1, 20.0, 50)
 
-    ssp_clipped = _clip_ssp(ssp, water_depth)
-
-    env = pm.create_env2d(
-        depth=water_depth,
-        soundspeed=ssp_clipped.tolist(),
-        frequency=frequency,
-        tx_depth=float(src_depth),
-        rx_depth=np.asarray(rx_depths, dtype=float),
-        rx_range=np.asarray(rx_ranges, dtype=float),
-        nbeams=n_rays,
-    )
-
-    _apply_bottom(env, bottom_type)
+    env = create_env(water_depth, _clip_ssp(ssp, water_depth), frequency, src_depth,
+                     rx_depths, rx_ranges, bottom_type=bottom_type, nbeams=n_rays)
     env['surface_absorption'] = float(surface_loss_db)
 
     return env
@@ -275,10 +355,10 @@ def describe_env(env):
     rd = env.get('rx_depth', None)
     rr = env.get('rx_range', None)
     if rd is not None:
-        rd = np.asarray(rd)
+        rd = np.atleast_1d(rd)
         print(f"  Rx depths:       {rd.min():.1f} to {rd.max():.1f} m ({len(rd)} depths)")
     if rr is not None:
-        rr = np.asarray(rr)
+        rr = np.atleast_1d(rr) / M_PER_KM
         print(f"  Rx ranges:       {rr.min():.2f} to {rr.max():.2f} km ({len(rr)} ranges)")
 
     print(f"  Bottom speed:    {env.get('bottom_soundspeed', 'N/A')} m/s")

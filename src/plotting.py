@@ -35,11 +35,11 @@ def _get_depth(env):
 
 
 def _get_max_range(env):
-    """Extract max receiver range in km from env dict."""
+    """Extract max receiver range in km from env dict (arlpy stores meters)."""
     rr = env.get('rx_range', None)
     if rr is None:
         return 10.0
-    return float(np.max(rr))
+    return float(np.max(rr)) / 1000.0
 
 
 def plot_ssp(ssp, ax=None, title='Sound Speed Profile', color=WATER_COLOR):
@@ -94,8 +94,8 @@ def plot_rays(ray_data, env, ax=None, title=None, max_rays=None, alpha=0.6):
     Parameters
     ----------
     ray_data : pandas.DataFrame or list
-        Output from pm.compute_rays(). Each row is one ray path; column 'ray'
-        holds an (N,2) array: col[:,0] = range in km, col[:,1] = depth in m.
+        Output from environment_builder.run_rays(). Each row is one ray path;
+        column 'ray' holds an (N,2) array: col[:,0] = range in km, col[:,1] = depth in m.
     env : dict
         arlpy environment dictionary
     ax : matplotlib.axes.Axes, optional
@@ -174,7 +174,7 @@ def plot_transmission_loss(tl_data, env, ax=None, dynamic_range=60, title=None, 
     Parameters
     ----------
     tl_data : pandas.DataFrame
-        Output from pm.compute_transmission_loss(). Index = depths (m),
+        Output from environment_builder.run_tl(). Index = depths (m),
         columns = ranges (km).
     env : dict
         arlpy environment dictionary

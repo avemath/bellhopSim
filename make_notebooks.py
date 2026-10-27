@@ -387,20 +387,17 @@ def _run_ray_trace(_=None):
     # Clip SSP to water depth
     ssp_use = eb._clip_ssp(ssp, water_depth)
 
-    env = pm.create_env2d(
-        depth=water_depth,
-        soundspeed=ssp_use.tolist(),
-        frequency=rt_freq.value,
-        tx_depth=src_depth,
-        rx_depth=np.linspace(0, water_depth, 21),
-        rx_range=np.linspace(0.1, rt_max_range.value, 25),
+    env = eb.create_env(
+        water_depth, ssp_use, rt_freq.value, src_depth,
+        rx_depths_m=np.linspace(0, water_depth, 21),
+        rx_ranges_km=np.linspace(0.1, rt_max_range.value, 25),
+        bottom_type=rt_bottom.value,
         min_angle=rt_min_angle.value,
         max_angle=rt_max_angle.value,
         nbeams=rt_n_rays.value,
     )
-    eb._apply_bottom(env, rt_bottom.value)
 
-    rays = pm.compute_rays(env)
+    rays = eb.run_rays(env)   # ray x coordinates in km
 
     with rt_out:
         clear_output(wait=True)
@@ -427,7 +424,7 @@ def _run_ray_trace(_=None):
         ax_ray.axhline(water_depth, color='#8B6914', linewidth=2, zorder=3)
         ax_ray.axhline(0, color='#2196F3', linewidth=2, zorder=3)
 
-        # Plot rays: arlpy stores each path in row['ray'] as (N,2):
+        # Plot rays: eb.run_rays stores each path in row['ray'] as (N,2):
         # col 0 = range in km, col 1 = depth in metres
         cmap = plt.cm.RdYlBu
         n_rays = len(rays)
@@ -563,21 +560,18 @@ def _run_tl(_=None):
     ssp = _locked_ssp['ssp']
     ssp_use = eb._clip_ssp(ssp, water_depth)
 
-    env = pm.create_env2d(
-        depth=water_depth,
-        soundspeed=ssp_use.tolist(),
-        frequency=tl_freq.value,
-        tx_depth=src_depth,
-        rx_depth=np.linspace(rx_min, rx_max, int(tl_n_depths.value)),
-        rx_range=np.linspace(0.5, tl_max_range.value, 100),
+    env = eb.create_env(
+        water_depth, ssp_use, tl_freq.value, src_depth,
+        rx_depths_m=np.linspace(rx_min, rx_max, int(tl_n_depths.value)),
+        rx_ranges_km=np.linspace(0.5, tl_max_range.value, 100),
+        bottom_type=tl_bottom.value,
         nbeams=200,
     )
-    eb._apply_bottom(env, tl_bottom.value)
 
     task = run_type_map.get(tl_run_type.value, pm.incoherent)
 
     try:
-        tl = pm.compute_transmission_loss(env, mode=task)
+        tl = eb.run_tl(env, mode=task)   # columns = range in km
     except Exception as exc:
         import traceback
         with tl_out:
@@ -749,25 +743,29 @@ def _run_arrivals(_=None):
     rx_depth  = min(arr_rx_depth.value,  water_depth - 1)
     ssp_use   = eb._clip_ssp(_locked_ssp['ssp'], water_depth)
 
-    env = pm.create_env2d(
-        depth=water_depth,
-        soundspeed=ssp_use.tolist(),
-        frequency=arr_freq.value,
-        tx_depth=src_depth,
-        rx_depth=np.array([rx_depth]),
-        rx_range=np.array([arr_rx_range.value]),
+    env = eb.create_env(
+        water_depth, ssp_use, arr_freq.value, src_depth,
+        rx_depths_m=rx_depth,
+        rx_ranges_km=arr_rx_range.value,
+        bottom_type=arr_bottom.value,
         nbeams=200,
     )
-    eb._apply_bottom(env, arr_bottom.value)
 
     with arr_out:
         clear_output(wait=True)
         print(f'Running BELLHOP arrivals: src={src_depth:.0f} m  rx={rx_depth:.0f} m @ {arr_rx_range.value:.1f} km ...')
 
     try:
-        arr = pm.compute_arrivals(env)
-    except ValueError:
-        # pandas ≥2.0: pd.concat([]) raises ValueError when BELLHOP finds no arrivals
+        arr = eb.run_arrivals(env)
+    except Exception as exc:
+        import traceback
+        with arr_out:
+            clear_output(wait=True)
+            print(f'BELLHOP error: {type(exc).__name__}: {exc}')
+            traceback.print_exc()
+        return
+
+    if arr is None:
         with arr_out:
             clear_output(wait=True)
             print('No arrivals found (BELLHOP returned empty result).')
@@ -775,13 +773,6 @@ def _run_arrivals(_=None):
             print('  • Increase range (try ≥ 50 km for deep water Munk profile)')
             print('  • Match Rx depth to source depth for maximum energy coupling')
             print('  • Verify source depth < water depth')
-        return
-    except Exception as exc:
-        import traceback
-        with arr_out:
-            clear_output(wait=True)
-            print(f'BELLHOP error: {type(exc).__name__}: {exc}')
-            traceback.print_exc()
         return
 
     _arr_result['arr'] = arr
@@ -1016,17 +1007,14 @@ def _compare_scenarios(_=None):
         tl_results, envs, labels = [], [], []
         for s in _scenarios:
             ssp_use = eb._clip_ssp(s['ssp'], s['water_depth'])
-            env = pm.create_env2d(
-                depth=s['water_depth'],
-                soundspeed=ssp_use.tolist(),
-                frequency=s['freq'],
-                tx_depth=s['src_depth'],
-                rx_depth=np.linspace(0, s['water_depth'], 21),
-                rx_range=np.linspace(0.5, s['max_range'], 80),
+            env = eb.create_env(
+                s['water_depth'], ssp_use, s['freq'], s['src_depth'],
+                rx_depths_m=np.linspace(0, s['water_depth'], 21),
+                rx_ranges_km=np.linspace(0.5, s['max_range'], 80),
+                bottom_type=s['bottom'],
                 nbeams=200,
             )
-            eb._apply_bottom(env, s['bottom'])
-            tl = pm.compute_transmission_loss(env, mode=pm.incoherent)
+            tl = eb.run_tl(env, mode=pm.incoherent)
             tl_results.append(tl)
             envs.append(env)
             labels.append(s['name'])
@@ -1304,17 +1292,14 @@ print(f'Computing {anim_n_src_depths} ray frames (one per source depth)...')
 frames_rays = []
 for i, src_d in enumerate(src_depths):
     ssp_use = eb._clip_ssp(ssp_munk, anim_water_depth)
-    env = pm.create_env2d(
-        depth=anim_water_depth,
-        soundspeed=ssp_use.tolist(),
-        frequency=anim_freq,
-        tx_depth=float(src_d),
-        rx_depth=np.linspace(0, anim_water_depth, 31),
-        rx_range=np.linspace(0.5, anim_max_range, 60),
+    env = eb.create_env(
+        anim_water_depth, ssp_use, anim_freq, float(src_d),
+        rx_depths_m=np.linspace(0, anim_water_depth, 31),
+        rx_ranges_km=np.linspace(0.5, anim_max_range, 60),
+        bottom_type=anim_bottom,
         nbeams=80, min_angle=-60, max_angle=60,
     )
-    eb._apply_bottom(env, anim_bottom)
-    rays = pm.compute_rays(env)
+    rays = eb.run_rays(env)   # ray x coordinates in km
     frames_rays.append((src_d, rays))
     print(f'  Frame {i+1}/{anim_n_src_depths}: src depth = {src_d:.0f} m')
 
@@ -1324,14 +1309,13 @@ print('All frames computed. Building animation...')
     cells.append(code_cell("""\
 # ── Build and display animation ───────────────────────────────────────────────
 fig, ax = plt.subplots(figsize=(14, 5))
-max_range_m = anim_max_range * 1000.0
 
 def draw_frame(frame_idx):
     ax.clear()
     src_d, rays = frames_rays[frame_idx]
 
     ax.set_facecolor('#ddeeff')
-    ax.fill_between([0, max_range_m],
+    ax.fill_between([0, anim_max_range],
                     [anim_water_depth] * 2, [anim_water_depth * 1.06] * 2,
                     color='#8B6914', alpha=0.9)
     ax.axhline(anim_water_depth, color='#8B6914', linewidth=2)
@@ -1343,13 +1327,13 @@ def draw_frame(frame_idx):
         for i, (_, row) in enumerate(rays.iterrows()):
             if 'ray' in row.index:
                 rp = np.asarray(row['ray'])
-                ax.plot(rp[:, 0] * 1000, rp[:, 1],
+                ax.plot(rp[:, 0], rp[:, 1],
                         color=cmap(i / max(n_r - 1, 1)), linewidth=0.7, alpha=0.6)
 
     ax.plot(0, src_d, 'r*', markersize=16, zorder=10)
-    ax.set_xlim(0, max_range_m)
+    ax.set_xlim(0, anim_max_range)
     ax.set_ylim(anim_water_depth * 1.06, -anim_water_depth * 0.02)
-    ax.set_xlabel('Range (m)', fontsize=11)
+    ax.set_xlabel('Range (km)', fontsize=11)
     ax.set_ylabel('Depth (m)', fontsize=11)
     ax.set_title(
         f'SOFAR Channel Animation  |  Source at {src_d:.0f} m depth  |  '
@@ -1399,17 +1383,14 @@ rx_depths  = np.linspace(0, sweep_depth, 51)
 rx_ranges  = np.linspace(0.5, sweep_range, 80)
 
 for freq in sweep_freqs:
-    env = pm.create_env2d(
-        depth=sweep_depth,
-        soundspeed=ssp_use.tolist(),
-        frequency=float(freq),
-        tx_depth=sweep_src,
-        rx_depth=rx_depths,
-        rx_range=rx_ranges,
+    env = eb.create_env(
+        sweep_depth, ssp_use, float(freq), sweep_src,
+        rx_depths_m=rx_depths,
+        rx_ranges_km=rx_ranges,
+        bottom_type=sweep_bottom,
         nbeams=200,
     )
-    eb._apply_bottom(env, sweep_bottom)
-    tl = pm.compute_transmission_loss(env, mode=pm.incoherent)
+    tl = eb.run_tl(env, mode=pm.incoherent)   # columns = range in km
     tl_results[freq] = tl
     print(f'  f={freq} Hz complete')
 
@@ -1505,20 +1486,19 @@ ssp_full = prof.munk_profile(z_max=3500, n_points=200)
 max_depth = float(bathy_depths.max())
 ssp_use = eb._clip_ssp(ssp_full, max_depth)
 
-env_rd = pm.create_env2d(
-    depth=list(zip(bathy_ranges.tolist(), bathy_depths.tolist())),
-    soundspeed=ssp_use.tolist(),
-    frequency=500.0,
-    tx_depth=50.0,   # shallow source, on the shelf
-    rx_depth=np.linspace(0, max_depth, 51),
-    rx_range=np.linspace(0.2, 120.0, 100),
+env_rd = eb.create_env(
+    np.column_stack([bathy_ranges, bathy_depths]),   # (range_km, depth_m) pairs
+    ssp_use, 500.0,
+    50.0,   # shallow source, on the shelf
+    rx_depths_m=np.linspace(0, max_depth, 51),
+    rx_ranges_km=np.linspace(0.2, 120.0, 100),
+    bottom_type='sand',
     nbeams=200,
     min_angle=-70, max_angle=70,
 )
-eb._apply_bottom(env_rd, 'sand')
 
-rays_rd = pm.compute_rays(env_rd)
-tl_rd   = pm.compute_transmission_loss(env_rd, mode=pm.incoherent)
+rays_rd = eb.run_rays(env_rd)                      # ray x in km
+tl_rd   = eb.run_tl(env_rd, mode=pm.incoherent)    # columns in km
 
 print('Range-dependent scenario complete.')
 print(f'  Rays: {len(rays_rd) if rays_rd is not None else "None"}')
@@ -1533,13 +1513,13 @@ fig, axes = plt.subplots(2, 1, figsize=(15, 10))
 ax_r = axes[0]
 from scipy.interpolate import interp1d
 bathy_interp = interp1d(bathy_ranges, bathy_depths, kind='linear', fill_value='extrapolate')
-range_m = np.linspace(0, 120000, 300)
-depth_at_range = bathy_interp(range_m / 1000.0)
+range_km = np.linspace(0, 120, 300)
+depth_at_range = bathy_interp(range_km)
 
 ax_r.set_facecolor('#ddeeff')
-ax_r.fill_between(range_m, depth_at_range, depth_at_range * 1.08,
+ax_r.fill_between(range_km, depth_at_range, depth_at_range * 1.08,
                    color='#8B6914', alpha=0.9, label='Bottom')
-ax_r.plot(range_m, depth_at_range, color='#8B6914', linewidth=2)
+ax_r.plot(range_km, depth_at_range, color='#8B6914', linewidth=2)
 ax_r.axhline(0, color='#2196F3', linewidth=2)
 
 if rays_rd is not None:
@@ -1548,13 +1528,13 @@ if rays_rd is not None:
     for i, (_, row) in enumerate(rays_rd.iterrows()):
         if 'ray' in row.index:
             rp = np.asarray(row['ray'])
-            ax_r.plot(rp[:, 0] * 1000, rp[:, 1],
+            ax_r.plot(rp[:, 0], rp[:, 1],
                       color=cmap(i / max(n_r-1, 1)), linewidth=0.7, alpha=0.55)
 
 ax_r.plot(0, 50, 'r*', markersize=16, zorder=10, label='Source (50 m, shelf)')
-ax_r.set_xlim(0, 120000)
+ax_r.set_xlim(0, 120)
 ax_r.set_ylim(max_depth * 1.08, -max_depth * 0.02)
-ax_r.set_xlabel('Range (m)', fontsize=11)
+ax_r.set_xlabel('Range (km)', fontsize=11)
 ax_r.set_ylabel('Depth (m)', fontsize=11)
 ax_r.set_title('Ray Diagram: Continental Slope Bathymetry | f=500 Hz', fontsize=12)
 ax_r.grid(True, alpha=0.2)
@@ -1593,10 +1573,14 @@ Use the BELLHOP channel impulse response to simulate an underwater acoustic
 communication link:
 
 1. Generate a BPSK symbol sequence
-2. Convolve with the acoustic multipath channel
-3. Add AWGN at a specified SNR
-4. Apply a zero-forcing equalizer
+2. Convolve with the complex acoustic multipath channel (complex baseband)
+3. Add complex AWGN at a specified per-sample SNR
+4. Synchronize to the strongest arrival (its delay and phase) and detect, with no equalizer,
+   so every other arrival shows up as intersymbol interference
 5. Plot constellation and compute BER vs SNR
+
+The link model lives in `src/utils.py` (`simulate_bpsk_link`, `bpsk_awgn_ber`) and is shared
+with `scripts/export_figures.py`.
 
 This directly connects ray acoustics output to the communications metrics
 studied in the V2V OFDM project.
@@ -1614,17 +1598,14 @@ comm_fs          = 10000.0  # sample rate
 ssp_sw = prof.shallow_water_profile(total_depth=comm_water_depth)
 ssp_sw_use = eb._clip_ssp(ssp_sw, comm_water_depth)
 
-env_c = pm.create_env2d(
-    depth=comm_water_depth,
-    soundspeed=ssp_sw_use.tolist(),
-    frequency=comm_freq,
-    tx_depth=comm_src_depth,
-    rx_depth=np.array([comm_rx_depth]),
-    rx_range=np.array([comm_rx_range]),
+env_c = eb.create_env(
+    comm_water_depth, ssp_sw_use, comm_freq, comm_src_depth,
+    rx_depths_m=comm_rx_depth,
+    rx_ranges_km=comm_rx_range,
+    bottom_type='sand',
     nbeams=1000,
 )
-eb._apply_bottom(env_c, 'sand')
-arr_c = pm.compute_arrivals(env_c)
+arr_c = eb.run_arrivals(env_c)
 
 if arr_c is not None:
     ir = ut.channel_to_impulse_response(arr_c, fs=comm_fs)
@@ -1642,46 +1623,23 @@ else:
 
     cells.append(code_cell("""\
 # ── BPSK through acoustic channel ─────────────────────────────────────────────
-from scipy.signal import convolve
-
-np.random.seed(42)
+rng          = np.random.default_rng(42)
 n_symbols    = 2000
 sps          = 4    # samples per symbol
 symbol_rate  = comm_fs / sps
 
-# Generate BPSK symbols: ±1
-bits    = np.random.randint(0, 2, n_symbols)
-symbols = 2 * bits - 1   # map 0→-1, 1→+1
-
-# Upsample (NRZ pulse shaping)
-tx_signal = np.repeat(symbols.astype(float), sps)
-
-# Normalize IR
+# Normalize IR (complex: keeps each arrival's phase)
 ir_norm = ir / (np.abs(ir).max() + 1e-12)
 
-def simulate_link(snr_db):
-    \"\"\"Convolve tx through channel, add AWGN, detect, return BER.\"\"\"
-    rx_noisy = convolve(tx_signal, np.real(ir_norm), mode='full')[:len(tx_signal)]
-    sig_power = np.mean(rx_noisy**2)
-    noise_power = sig_power / (10**(snr_db/10))
-    noise = np.sqrt(noise_power) * np.random.randn(len(rx_noisy))
-    rx = rx_noisy + noise
-    # Downsample and detect
-    rx_down = rx[sps//2::sps][:n_symbols]
-    detected = (rx_down >= 0).astype(int)
-    ber = np.mean(detected != bits[:len(detected)])
-    return ber, rx_down
-
-# BER vs SNR curve
+# BER vs SNR curve (receiver synced to the strongest arrival, no equalizer)
 snr_range = np.arange(-2, 22, 2)
 bers = []
 for snr in snr_range:
-    ber_vals = [simulate_link(snr)[0] for _ in range(3)]
+    ber_vals = [ut.simulate_bpsk_link(ir_norm, snr, n_symbols, sps, rng)[0] for _ in range(3)]
     bers.append(np.mean(ber_vals))
 
-# Theoretical AWGN BPSK BER
-from scipy.special import erfc
-ber_awgn = 0.5 * erfc(np.sqrt(10**(snr_range/10)))
+# Theoretical AWGN BPSK BER for the same SNR definition
+ber_awgn = ut.bpsk_awgn_ber(snr_range)
 
 print(f'BER simulation complete over SNR range {snr_range[0]} to {snr_range[-1]} dB')
 """))
@@ -1706,7 +1664,7 @@ ax_ir.set_title(
 ax_ir.grid(True, alpha=0.25)
 
 # 2: Constellation at mid-SNR
-_, rx_down_10 = simulate_link(10)
+_, rx_down_10, bits = ut.simulate_bpsk_link(ir_norm, 10, n_symbols, sps, rng)
 ax_con = axes[1]
 colors_bits = ['#e74c3c' if b==0 else '#2980b9' for b in bits[:len(rx_down_10)]]
 ax_con.scatter(rx_down_10, np.zeros(len(rx_down_10)), c=colors_bits,

@@ -85,7 +85,7 @@ def find_convergence_zones(tl_data, threshold_db=5.0, reference_depth_idx=None):
     Parameters
     ----------
     tl_data : pandas.DataFrame
-        TL DataFrame from pm.compute_transmission_loss().
+        TL DataFrame from environment_builder.run_tl().
         Index = depths (m), columns = ranges (km).
     threshold_db : float
         Minimum dB dip below local trend to flag as a CZ, default 5
@@ -221,6 +221,101 @@ def channel_to_impulse_response(arr_data, fs=10000.0, duration=None, rx_range_km
             ir[idx] += amp
 
     return ir
+
+
+def delay_spread_within(arr_data, db_below_peak=20.0):
+    """Delay spread over arrivals within db_below_peak of the strongest.
+
+    Parameters
+    ----------
+    arr_data : pandas.DataFrame
+        Output from environment_builder.run_arrivals()
+    db_below_peak : float
+        Keep arrivals whose amplitude is at most this many dB below the strongest
+
+    Returns
+    -------
+    spread_ms : float
+    n_arrivals : int
+    """
+    amp_col = _amp_col(arr_data)
+    amps = np.abs(np.asarray(arr_data[amp_col], dtype=complex))
+    times = np.asarray(arr_data['time_of_arrival'], dtype=float)
+    keep = np.isfinite(amps) & np.isfinite(times) & (amps > 0)
+    amps, times = amps[keep], times[keep]
+    if len(amps) == 0:
+        return 0.0, 0
+    keep = 20.0 * np.log10(amps / amps.max()) >= -db_below_peak
+    return float((times[keep].max() - times[keep].min()) * 1000.0), int(keep.sum())
+
+
+def bpsk_awgn_ber(snr_db):
+    """Theoretical BPSK bit error rate in AWGN for simulate_bpsk_link's SNR definition.
+
+    With complex noise of power N per sample and a decision on the real part,
+    BER = Q(sqrt(2*SNR)) = 0.5*erfc(sqrt(SNR)).
+
+    Parameters
+    ----------
+    snr_db : float or numpy.ndarray
+        Per-sample SNR in dB
+
+    Returns
+    -------
+    float or numpy.ndarray
+    """
+    from scipy.special import erfc
+    return 0.5 * erfc(np.sqrt(10.0 ** (np.asarray(snr_db, dtype=float) / 10.0)))
+
+
+def simulate_bpsk_link(ir, snr_db, n_symbols=2000, sps=4, rng=None):
+    """Send BPSK through a multipath channel and return the bit error rate.
+
+    Complex baseband model: NRZ BPSK symbols are convolved with the complex
+    channel impulse response and complex AWGN is added at the given
+    per-sample SNR (received signal power / noise power). The receiver is
+    synchronized to the strongest arrival: it samples at that arrival's
+    delay and removes its phase, takes one sample per symbol at mid-symbol,
+    and decides on the sign of the real part. There is no equalizer, so all
+    other arrivals act as intersymbol interference.
+
+    Parameters
+    ----------
+    ir : numpy.ndarray
+        Complex channel impulse response (e.g. from channel_to_impulse_response)
+    snr_db : float
+        Per-sample SNR in dB
+    n_symbols : int
+        Number of BPSK symbols
+    sps : int
+        Samples per symbol
+    rng : numpy.random.Generator, optional
+
+    Returns
+    -------
+    ber : float
+    decisions : numpy.ndarray
+        Real-valued decision samples, one per symbol
+    bits : numpy.ndarray
+        Transmitted bits
+    """
+    from scipy.signal import convolve
+
+    rng = rng if rng is not None else np.random.default_rng()
+    h = np.asarray(ir, dtype=complex)
+    k0 = int(np.argmax(np.abs(h)))
+    derotate = np.conj(h[k0]) / np.abs(h[k0])
+
+    bits = rng.integers(0, 2, n_symbols)
+    tx = np.repeat((2 * bits - 1).astype(float), sps)
+    rx = convolve(tx, h, mode='full')[k0:k0 + len(tx)]
+
+    noise_power = np.mean(np.abs(rx) ** 2) / (10.0 ** (snr_db / 10.0))
+    noise = np.sqrt(noise_power / 2.0) * (rng.standard_normal(len(rx))
+                                          + 1j * rng.standard_normal(len(rx)))
+    decisions = ((rx + noise) * derotate)[sps // 2::sps][:n_symbols].real
+    ber = float(np.mean((decisions >= 0).astype(int) != bits[:len(decisions)]))
+    return ber, decisions, bits
 
 
 def compute_arrival_stats(arr_data):

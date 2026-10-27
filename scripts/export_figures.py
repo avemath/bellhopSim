@@ -8,10 +8,10 @@ notebook) through BELLHOP, then writes PNGs and figures.json to docs/figures/.
 Usage (from the project root):
     python scripts/export_figures.py
 
-Unit note: arlpy expects receiver ranges in meters and returns ray x
-coordinates and TL columns in meters. Scenario ranges below are written in km
-for readability, converted to meters for BELLHOP, and converted back to km
-for plotting.
+All BELLHOP runs go through src/environment_builder.py (create_env, run_rays,
+run_tl, run_arrivals), which take and return ranges in km, and the comms link
+uses src/utils.py (simulate_bpsk_link, bpsk_awgn_ber). The notebooks use the
+same functions.
 """
 
 import json
@@ -24,8 +24,6 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.lines import Line2D
-from scipy.signal import convolve
-from scipy.special import erfc
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -38,7 +36,6 @@ import src.utils as ut
 
 OUT_DIR = os.path.join(ROOT, 'docs', 'figures')
 DPI = 150
-KM = 1000.0
 
 plt.rcParams.update({
     'figure.facecolor': 'white',
@@ -106,29 +103,6 @@ COMMS = {
 }
 
 
-def _rays_to_km(rays):
-    out = rays.copy()
-    out['ray'] = [np.column_stack([np.asarray(r)[:, 0] / KM, np.asarray(r)[:, 1]])
-                  for r in rays['ray']]
-    return out
-
-
-def _tl_to_km(tl):
-    out = tl.copy()
-    out.columns = np.asarray(tl.columns, dtype=float) / KM
-    return out
-
-
-def _spread_within(arr, db_below_peak):
-    """Delay spread (ms) and count of arrivals within db_below_peak of the strongest."""
-    amps = np.abs(np.asarray(arr['arrival_amplitude'], dtype=complex))
-    times = np.asarray(arr['time_of_arrival'], dtype=float)
-    keep = np.isfinite(amps) & np.isfinite(times) & (amps > 0)
-    amps, times = amps[keep], times[keep]
-    keep = 20.0 * np.log10(amps / amps.max()) >= -db_below_peak
-    return float((times[keep].max() - times[keep].min()) * 1000.0), int(keep.sum())
-
-
 def _save(fig, name):
     path = os.path.join(OUT_DIR, name)
     fig.savefig(path, dpi=DPI, bbox_inches='tight', facecolor='white')
@@ -146,40 +120,36 @@ def deep_water(pm, results):
 
     # ── Rays ──
     r = d['rays']
-    env_rays = pm.create_env2d(
-        depth=wd, soundspeed=ssp_use.tolist(), frequency=d['frequency_hz'],
-        tx_depth=d['source_depth_m'],
-        rx_depth=np.linspace(0, wd, 21),
-        rx_range=np.linspace(0.1, r['max_range_km'], 25) * KM,
+    env_rays = eb.create_env(
+        wd, ssp_use, d['frequency_hz'], d['source_depth_m'],
+        rx_depths_m=np.linspace(0, wd, 21),
+        rx_ranges_km=np.linspace(0.1, r['max_range_km'], 25),
+        bottom_type=d['bottom_type'],
         min_angle=r['min_angle_deg'], max_angle=r['max_angle_deg'],
         nbeams=r['n_rays'],
     )
-    eb._apply_bottom(env_rays, d['bottom_type'])
-    rays = pm.compute_rays(env_rays)
+    rays = eb.run_rays(env_rays)
     if rays is None or len(rays) == 0:
-        raise RuntimeError('compute_rays returned no rays')
+        raise RuntimeError('run_rays returned no rays')
 
     fig, axes = plt.subplots(1, 2, figsize=(15, 5.5), gridspec_kw={'width_ratios': [1, 2.6]})
     pl.plot_ssp(ssp_use, ax=axes[0], title='Munk sound speed profile')
-    env_km = dict(env_rays, rx_range=np.asarray(env_rays['rx_range']) / KM)
-    pl.plot_rays(_rays_to_km(rays), env_km, ax=axes[1],
+    pl.plot_rays(rays, env_rays, ax=axes[1],
                  title=(f'Ray trace: {len(rays)} rays, source at {d["source_depth_m"]:.0f} m, '
                         f'{d["frequency_hz"]:.0f} Hz, {d["bottom_type"]} bottom'))
-    axes[1].set_xlim(0, r['max_range_km'])
     fig.tight_layout()
     _save(fig, 'ssp_and_rays.png')
 
     # ── TL map ──
     t = d['tl']
-    env_tl = pm.create_env2d(
-        depth=wd, soundspeed=ssp_use.tolist(), frequency=d['frequency_hz'],
-        tx_depth=d['source_depth_m'],
-        rx_depth=np.linspace(t['rx_min_depth_m'], t['rx_max_depth_m'], t['n_rx_depths']),
-        rx_range=np.linspace(t['min_range_km'], t['max_range_km'], t['n_ranges']) * KM,
+    env_tl = eb.create_env(
+        wd, ssp_use, d['frequency_hz'], d['source_depth_m'],
+        rx_depths_m=np.linspace(t['rx_min_depth_m'], t['rx_max_depth_m'], t['n_rx_depths']),
+        rx_ranges_km=np.linspace(t['min_range_km'], t['max_range_km'], t['n_ranges']),
+        bottom_type=d['bottom_type'],
         nbeams=t['n_beams'],
     )
-    eb._apply_bottom(env_tl, d['bottom_type'])
-    tl = _tl_to_km(pm.compute_transmission_loss(env_tl, mode=pm.incoherent))
+    tl = eb.run_tl(env_tl, mode=pm.incoherent)
 
     fig, ax = plt.subplots(figsize=(13, 5.5))
     _, cb = pl.plot_transmission_loss(
@@ -201,20 +171,19 @@ def deep_water(pm, results):
 
     # ── Arrivals ──
     a = d['arrivals']
-    env_arr = pm.create_env2d(
-        depth=wd, soundspeed=ssp_use.tolist(), frequency=d['frequency_hz'],
-        tx_depth=d['source_depth_m'],
-        rx_depth=float(a['rx_depth_m']),          # scalars: arlpy's env writer
-        rx_range=float(a['rx_range_km'] * KM),     # rejects 1-element arrays
+    env_arr = eb.create_env(
+        wd, ssp_use, d['frequency_hz'], d['source_depth_m'],
+        rx_depths_m=a['rx_depth_m'],
+        rx_ranges_km=a['rx_range_km'],
+        bottom_type=d['bottom_type'],
         nbeams=a['n_beams'],
     )
-    eb._apply_bottom(env_arr, d['bottom_type'])
-    arr = pm.compute_arrivals(env_arr)
+    arr = eb.run_arrivals(env_arr)
     stats = ut.compute_arrival_stats(arr)
     if stats['n_arrivals'] == 0:
         raise RuntimeError('compute_arrivals returned no valid arrivals')
     spread_ms = stats['delay_spread_ms']
-    spread20_ms, n20 = _spread_within(arr, 20.0)
+    spread20_ms, n20 = ut.delay_spread_within(arr, 20.0)
 
     fig, ax = plt.subplots(figsize=(12, 5))
     pl.plot_arrivals(arr, env_arr, ax=ax, title=(
@@ -275,13 +244,12 @@ def frequency_sweep(pm, results):
     fig, ax = plt.subplots(figsize=(12, 5.5))
     summary = {}
     for i, freq in enumerate(s['frequencies_hz']):
-        env = pm.create_env2d(
-            depth=wd, soundspeed=ssp_use.tolist(), frequency=float(freq),
-            tx_depth=s['source_depth_m'], rx_depth=rx_depths,
-            rx_range=rx_ranges_km * KM, nbeams=s['n_beams'],
+        env = eb.create_env(
+            wd, ssp_use, float(freq), s['source_depth_m'],
+            rx_depths_m=rx_depths, rx_ranges_km=rx_ranges_km,
+            bottom_type=s['bottom_type'], nbeams=s['n_beams'],
         )
-        eb._apply_bottom(env, s['bottom_type'])
-        tl = _tl_to_km(pm.compute_transmission_loss(env, mode=pm.incoherent))
+        tl = eb.run_tl(env, mode=pm.incoherent)
         depths = np.asarray(tl.index, dtype=float)
         rk = np.asarray(tl.columns, dtype=float)
         di = int(np.argmin(np.abs(depths - s['tl_slice_depth_m'])))
@@ -323,59 +291,41 @@ def comms_link(pm, results):
     c = COMMS
     wd = c['water_depth_m']
     ssp_use = eb._clip_ssp(prof.shallow_water_profile(total_depth=wd), wd)
-    env = pm.create_env2d(
-        depth=wd, soundspeed=ssp_use.tolist(), frequency=c['frequency_hz'],
-        tx_depth=c['source_depth_m'],
-        rx_depth=float(c['rx_depth_m']),
-        rx_range=float(c['rx_range_km'] * KM),
+    env = eb.create_env(
+        wd, ssp_use, c['frequency_hz'], c['source_depth_m'],
+        rx_depths_m=c['rx_depth_m'],
+        rx_ranges_km=c['rx_range_km'],
+        bottom_type=c['bottom_type'],
         nbeams=c['n_beams'],
     )
-    eb._apply_bottom(env, c['bottom_type'])
-    arr = pm.compute_arrivals(env)
+    arr = eb.run_arrivals(env)
     stats = ut.compute_arrival_stats(arr)
     if stats['n_arrivals'] == 0:
         raise RuntimeError('Comms scenario returned no arrivals')
     fs = c['sample_rate_hz']
     ir = ut.channel_to_impulse_response(arr, fs=fs)
     ir_norm = ir / (np.abs(ir).max() + 1e-12)
-    spread20_ms, n20 = _spread_within(arr, 20.0)
+    spread20_ms, n20 = ut.delay_spread_within(arr, 20.0)
 
-    # Link model: NRZ BPSK at complex baseband, convolved with the complex
-    # BELLHOP impulse response, complex AWGN at a per-sample SNR. The receiver
-    # is synchronized to the strongest arrival (its delay and phase), takes one
-    # sample per symbol, and makes a sign decision. No equalizer, so every other
-    # arrival shows up as ISI. The advanced notebook instead keeps only the real
-    # part of the taps and samples from the first arrival, which misaligns bits
-    # whenever the strongest path is not the first.
+    # Shared link model (src/utils.py, same as the advanced notebook):
+    # receiver synced to the strongest arrival, no equalizer.
     rng = np.random.default_rng(c['random_seed'])
     sps, n_sym = c['samples_per_symbol'], c['n_symbols_per_trial']
 
     def ber_at(snr_db, h):
-        k0 = int(np.argmax(np.abs(h)))
-        derotate = np.conj(h[k0]) / np.abs(h[k0])
-        errs = 0
-        for _ in range(c['n_trials_per_snr']):
-            bits = rng.integers(0, 2, n_sym)
-            tx = np.repeat((2 * bits - 1).astype(float), sps)
-            rx = convolve(tx, h, mode='full')[k0:k0 + len(tx)]
-            noise_power = np.mean(np.abs(rx) ** 2) / (10 ** (snr_db / 10))
-            noise = np.sqrt(noise_power / 2) * (rng.standard_normal(len(rx))
-                                                + 1j * rng.standard_normal(len(rx)))
-            y = (rx + noise) * derotate
-            detected = (y[sps // 2::sps][:n_sym].real >= 0).astype(int)
-            errs += int(np.sum(detected != bits[:len(detected)]))
-        return errs / (n_sym * c['n_trials_per_snr'])
+        errors = sum(round(ut.simulate_bpsk_link(h, snr_db, n_sym, sps, rng)[0] * n_sym)
+                     for _ in range(c['n_trials_per_snr']))
+        return errors / (n_sym * c['n_trials_per_snr'])
 
     snr = np.array(c['snr_db'], dtype=float)
     ber_ch = np.array([ber_at(x, ir_norm) for x in snr])
     ber_awgn_sim = np.array([ber_at(x, np.array([1.0 + 0j])) for x in snr])
-    # Theory for this SNR definition (complex noise, decision on the real part)
-    ber_theory = 0.5 * erfc(np.sqrt(10 ** (snr / 10)))
+    ber_theory = ut.bpsk_awgn_ber(snr)
     n_bits = n_sym * c['n_trials_per_snr']
 
     fig, ax = plt.subplots(figsize=(9, 6))
     snr_fine = np.linspace(snr[0], snr[-1], 200)
-    ax.semilogy(snr_fine, 0.5 * erfc(np.sqrt(10 ** (snr_fine / 10))), '--',
+    ax.semilogy(snr_fine, ut.bpsk_awgn_ber(snr_fine), '--',
                 color='#52514e', linewidth=2, label='Theoretical BPSK, AWGN only')
     nz = ber_ch > 0
     ax.semilogy(snr[nz], ber_ch[nz], 'o-', color='#2a78d6', linewidth=2, markersize=8,

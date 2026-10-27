@@ -157,6 +157,28 @@ python scripts/export_figures.py
 
 ---
 
+## Fixes
+
+Physics bugs found and fixed while preparing the figures. Each has a regression test in
+`tests/test_physics.py`.
+
+- **Range units:** receiver ranges in km were passed straight to arlpy, which expects meters, so a "100 km" run actually covered 100 m. All runs now go through `environment_builder.create_env()` (km in, meters to arlpy) and `run_rays` / `run_tl` (meters back to km).
+- **Bottom density units:** `BOTTOM_TYPES` stored density in g/cm³, but arlpy expects kg/m³ and divides by 1000, so BELLHOP saw a bottom far lighter than water that reflected almost without loss. Densities are now in kg/m³.
+- **BER simulator:** the comms link kept only the real part of the channel taps and timed symbols from the first arrival, so BER sat near 0.5 whenever the strongest path came later. `utils.simulate_bpsk_link()` now works at complex baseband and syncs to the strongest arrival's delay and phase (still no equalizer), and the AWGN reference curve matches its SNR definition.
+
+Also fixed: single-receiver runs crashed under NumPy 2 (arlpy rejects 1-element arrays, so
+they are now passed as scalars), and `plot_rays` used `cm.get_cmap`, which matplotlib 3.9 removed.
+
+Run the checks with:
+
+```bash
+python -m pytest
+```
+
+Tests that need BELLHOP are skipped automatically if `bellhop.exe` is not reachable.
+
+---
+
 ## Project Structure
 
 ```
@@ -172,9 +194,11 @@ bellhopSim/
 ├── src/
 │   ├── bellhop_config.py           ← WSL path fix + arlpy patch (import FIRST)
 │   ├── profiles.py                 ← SSP library (Munk, shallow water, Arctic, ...)
-│   ├── environment_builder.py      ← arlpy env dict builders + bottom type table
+│   ├── environment_builder.py      ← create_env/run_* (km to m boundary) + bottom type table
 │   ├── plotting.py                 ← publication-quality plot functions
-│   └── utils.py                    ← delay spread, SNR, CZ detection, IR synthesis
+│   └── utils.py                    ← delay spread, SNR, CZ detection, IR synthesis, BPSK link
+├── tests/
+│   └── test_physics.py             ← regression checks for the fixes above
 ├── make_notebooks.py               ← regenerates both notebooks from source
 ├── requirements.txt
 ├── .gitignore

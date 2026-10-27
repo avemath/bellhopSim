@@ -6,3 +6,4 @@ jupyterlab>=4.0
 notebook>=7.0
 arlpy>=1.9
 pandas>=2.0
+pytest>=7.0
