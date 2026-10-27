@@ -189,15 +189,14 @@ def deep_water(pm, results):
     pl.plot_arrivals(arr, env_arr, ax=ax, title=(
         f'Multipath arrivals at {a["rx_range_km"]:.0f} km range, {a["rx_depth_m"]:.0f} m depth: '
         f'{stats["n_arrivals"]} paths'))
-    ax.set_ylim(-0.05, 1.42)
-    for y, x1, label in ((1.32, spread_ms, f'Delay spread, all eigenrays = {spread_ms:,.0f} ms'),
-                         (1.16, spread20_ms, f'Within 20 dB of strongest ({n20} paths) = {spread20_ms:,.0f} ms')):
-        ax.annotate('', xy=(x1, y), xytext=(0, y),
-                    arrowprops=dict(arrowstyle='<->', color='#0b0b0b', lw=1.5))
-        ax.text(x1 / 2 if x1 > spread_ms * 0.3 else x1 + spread_ms * 0.01, y + 0.015, label,
-                ha='center' if x1 > spread_ms * 0.3 else 'left', va='bottom',
-                fontsize=11, color='#0b0b0b')
-    ax.axvline(spread_ms, color='#52514e', linestyle=':', linewidth=1)
+    ax.set_ylim(-0.05, 1.3)
+    # Only the spread within 20 dB of the strongest arrival is marked: the full eigenray
+    # spread is set by echoes far too weak to matter for a receiver.
+    y = 1.16
+    ax.annotate('', xy=(spread20_ms, y), xytext=(0, y),
+                arrowprops=dict(arrowstyle='<->', color='#0b0b0b', lw=1.5))
+    ax.text(spread20_ms + spread_ms * 0.01, y, f'Within 20 dB of strongest ({n20} paths) = {spread20_ms:,.0f} ms',
+            ha='left', va='center', fontsize=11, color='#0b0b0b')
     ax.axvline(spread20_ms, color='#52514e', linestyle=':', linewidth=1)
     bounce_pal = [pl.WATER_COLOR, '#27ae60', '#e67e22', '#c0392b']
     handles = [Line2D([0], [0], color=c, marker='o', lw=2, label=lbl) for c, lbl in
@@ -331,7 +330,7 @@ def comms_link(pm, results):
     ax.semilogy(snr[nz], ber_ch[nz], 'o-', color='#2a78d6', linewidth=2, markersize=8,
                 label=f'Simulated BPSK, BELLHOP multipath channel ({stats["n_arrivals"]} paths)')
     ax.set_ylim(max(0.5 / n_bits, 1e-6), 1)
-    ax.set_xlabel('SNR per sample (dB)')
+    ax.set_xlabel('SNR per sample, on total received power (dB)')
     ax.set_ylabel('Bit error rate')
     ax.set_title(f'BPSK BER vs SNR: {wd:.0f} m water, {c["rx_range_km"]:.0f} km range, '
                  f'{c["frequency_hz"]:.0f} Hz\nReceiver synced to strongest path, no equalizer')
