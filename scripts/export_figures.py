@@ -37,17 +37,22 @@ import src.utils as ut
 OUT_DIR = os.path.join(ROOT, 'docs', 'figures')
 DPI = 150
 
+# The figures are shown about 500 to 1000 px wide on the portfolio, so the type is set large
+# enough to stay readable at that size.
 plt.rcParams.update({
     'figure.facecolor': 'white',
     'axes.facecolor': 'white',
     'savefig.facecolor': 'white',
-    'font.size': 12,
-    'axes.titlesize': 13,
-    'axes.labelsize': 12,
-    'xtick.labelsize': 11,
-    'ytick.labelsize': 11,
-    'legend.fontsize': 10,
+    'font.size': 19,
+    'axes.titlesize': 21,
+    'axes.labelsize': 19,
+    'xtick.labelsize': 18,
+    'ytick.labelsize': 18,
+    'legend.fontsize': 16,
 })
+pl.LABEL_SIZE = 19
+pl.TITLE_SIZE = 21
+pl.LEGEND_SIZE = 16
 
 # ── Scenario parameters ──────────────────────────────────────────────────────
 # Deep-water scenario: interactive notebook defaults (Sections 3 to 5)
@@ -196,7 +201,7 @@ def deep_water(pm, results):
     ax.annotate('', xy=(spread20_ms, y), xytext=(0, y),
                 arrowprops=dict(arrowstyle='<->', color='#0b0b0b', lw=1.5))
     ax.text(spread20_ms + spread_ms * 0.01, y, f'Within 20 dB of strongest ({n20} paths) = {spread20_ms:,.0f} ms',
-            ha='left', va='center', fontsize=11, color='#0b0b0b')
+            ha='left', va='center', fontsize=18, color='#0b0b0b')
     ax.axvline(spread20_ms, color='#52514e', linestyle=':', linewidth=1)
     bounce_pal = [pl.WATER_COLOR, '#27ae60', '#e67e22', '#c0392b']
     handles = [Line2D([0], [0], color=c, marker='o', lw=2, label=lbl) for c, lbl in
@@ -261,7 +266,7 @@ def frequency_sweep(pm, results):
                 markersize=5, markevery=8, label=f'{freq} Hz')
         last = np.where(np.isfinite(tl_slice))[0][-1]
         ax.annotate(f'{freq} Hz', xy=(rk[last], tl_slice[last]), xytext=(6, 0),
-                    textcoords='offset points', va='center', fontsize=10, color='#0b0b0b')
+                    textcoords='offset points', va='center', fontsize=16, color='#0b0b0b')
         summary[f'{freq}_hz'] = {
             f'tl_db_at_{r:g}_km': float(tl_slice[int(np.argmin(np.abs(rk - r)))])
             for r in (10, 50, 100)
