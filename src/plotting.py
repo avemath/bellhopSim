@@ -22,6 +22,7 @@ SURFACE_COLOR = '#2196F3'
 GRID_ALPHA = 0.25
 LABEL_SIZE = 11
 TITLE_SIZE = 13
+LEGEND_SIZE = 9
 
 
 def _get_depth(env):
@@ -77,7 +78,7 @@ def plot_ssp(ssp, ax=None, title='Sound Speed Profile', color=WATER_COLOR):
     ax.set_ylabel('Depth (m)', fontsize=LABEL_SIZE)
     ax.set_title(title, fontsize=TITLE_SIZE)
     ax.grid(True, alpha=GRID_ALPHA)
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=LEGEND_SIZE)
 
     c_min, c_max = ssp[:, 1].min(), ssp[:, 1].max()
     margin = (c_max - c_min) * 0.05 if c_max > c_min else 5.0
@@ -161,7 +162,7 @@ def plot_rays(ray_data, env, ax=None, title=None, max_rays=None, alpha=0.6):
     freq = env.get('frequency', '')
     default_title = f'Ray Diagram  |  f = {freq} Hz  |  depth = {water_depth:.0f} m'
     ax.set_title(title or default_title, fontsize=TITLE_SIZE)
-    ax.legend(fontsize=9, loc='upper right')
+    ax.legend(fontsize=LEGEND_SIZE, loc='upper right')
 
     if standalone:
         plt.tight_layout()
@@ -239,7 +240,7 @@ def plot_transmission_loss(tl_data, env, ax=None, dynamic_range=60, title=None, 
     ax.set_xlabel('Range (km)', fontsize=LABEL_SIZE)
     ax.set_ylabel('Depth (m)', fontsize=LABEL_SIZE)
     ax.grid(True, alpha=GRID_ALPHA, color='white')
-    ax.legend(fontsize=9, loc='upper right')
+    ax.legend(fontsize=LEGEND_SIZE, loc='upper right')
 
     default_title = f'Transmission Loss  |  f = {freq} Hz  |  {dynamic_range} dB dynamic range'
     ax.set_title(title or default_title, fontsize=TITLE_SIZE)
@@ -302,7 +303,7 @@ def plot_tl_slice(tl_data, depth_m, env, ax=None, title=None, color=WATER_COLOR)
     default_title = f'TL vs Range at {actual_depth:.0f} m  |  f = {freq} Hz'
     ax.set_title(title or default_title, fontsize=TITLE_SIZE)
     ax.grid(True, alpha=GRID_ALPHA)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=LEGEND_SIZE + 1)
 
     if standalone:
         plt.tight_layout()
@@ -491,7 +492,7 @@ def plot_scenario_comparison(tl_results, labels, env_list, depth_m=None):
     ax.set_title(f'TL Comparison at {depth_m:.0f} m depth' if depth_m else 'TL Comparison',
                  fontsize=TITLE_SIZE)
     ax.grid(True, alpha=GRID_ALPHA)
-    ax.legend(fontsize=10)
+    ax.legend(fontsize=LEGEND_SIZE + 1)
     fig.tight_layout()
     return fig
 
